@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>シンプルデイレポート</title>
+  <style>
+:root {
+  --primary: #2c3e50;
+  --primary-hover: #1a252f;
+  --bg-main: #f8f9fa;
+  --bg-card: #ffffff;
+  --bg-sidebar: #f3f4f6;
+  --border: #e5e7eb;
+  --text: #1f2937;
+  --text-muted: #6b7280;
+  --top-bar-bg: #ffffff;
+  --top-bar-border: #e5e7eb;
+  --top-bar-text: #2c3e50;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --border-width: 1px;
+  --control-height: 40px;
+  --space-unit: 8px;
+  --motion-duration: 200ms;
+  --surface-texture: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 100%), repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0, 0, 0, 0.01) 2px, rgba(0, 0, 0, 0.01) 4px);
+  --surface-texture-size: 100% 100%;
+  --surface-texture-position: 0 0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-family);
+  color: var(--text);
+  background-color: var(--bg-main);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.top-bar {
+  background-color: var(--top-bar-bg);
+  border-bottom: var(--border-width) solid var(--top-bar-border);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  height: 64px;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--top-bar-text);
+  letter-spacing: -0.5px;
+}
+
+.logo-system {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.user-name {
+  font-size: 14px;
+  color: var(--top-bar-text);
+  font-weight: 500;
+}
+
+.logout-link {
+  font-size: 13px;
+  color: var(--primary);
+  text-decoration: none;
+  transition: color var(--motion-duration);
+}
+
+.logout-link:hover {
+  color: var(--primary-hover);
+}
+
+.main-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 240px;
+  background-color: var(--bg-sidebar);
+  border-right: var(--border-width) solid var(--border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: calc(var(--space-unit) * 2) 0;
+}
+
+.nav-section {
+  padding: 0 calc(var(--space-unit) * 2);
+  margin-bottom: calc(var(--space-unit) * 3);
+}
+
+.nav-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: calc(var(--space-unit) * 1.5);
+  padding: 0 calc(var(--space-unit) * 1.5);
+}
+
+.nav-item {
+  display: block;
+  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 1.5);
+  margin-bottom: calc(var(--space-unit) * 0.5);
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--motion-duration), color var(--motion-duration);
+  border: var(--border-width) solid transparent;
+}
+
+.nav-item:hover {
+  background-color: rgba(44, 62, 80, 0.08);
+}
+
+.nav-item.aivic-active {
+  background-color: var(--primary);
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  background-color: var(--bg-main);
+}
+
+[data-aivic-panel] {
+  width: 100%;
+  height: 100%;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.content-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+  </style>
+  
+<script>
+window.AIVIC_API_URL = "https://jqykrkgdvngp7qvmavufg5tohq0xwdzb.lambda-url.us-east-1.on.aws/";
+window.AIVIC_APP_ID = "session-bca4a8ca-568d-458a-b430-abac3a94e9ca";
+window.AIVIC_SYSTEM_NAME = "日報管理システム";
+window.AIVIC_TABLES = [{"tableName":"ユーザー","purpose":"日報管理システムのユーザー情報を管理し、認証・認可・監査ログの基盤となるマスタテーブル","columns":[{"name":"ユーザーID","type":"uuid","required":true,"description":"ユーザーの一意識別子"},{"name":"ユーザー名","type":"varchar(100)","required":true,"description":"ログイン時に使用するユーザー名"},{"name":"メールアドレス","type":"varchar(100)","required":true,"description":"ユーザーの連絡先メールアドレス"},{"name":"氏名","type":"varchar(100)","required":true,"description":"ユーザーの表示用氏名"},{"name":"部門","type":"varchar(100)","required":false,"description":"ユーザーが所属する部門"},{"name":"役割","type":"varchar(100)","required":true,"description":"ユーザーの権限レベル（管理者・マネージャー・一般等）"},{"name":"ステータス","type":"varchar(100)","required":true,"description":"ユーザーの状態（有効・無効・休止等）"},{"name":"作成日時","type":"timestamp","required":true,"description":"ユーザーレコードの作成日時"},{"name":"更新日時","type":"timestamp","required":true,"description":"ユーザーレコードの最終更新日時"},{"name":"作成者","type":"varchar(100)","required":true,"description":"ユーザーレコードを作成したユーザー"}]},{"tableName":"日報","purpose":"従業員の日次業務報告を記録・管理し、業務内容、成果、課題を追跡するシステム","columns":[{"name":"日報ID","type":"uuid","required":true,"description":"日報の一意識別子"},{"name":"ユーザーID","type":"uuid","required":true,"description":"日報を作成したユーザーの外部キー"},{"name":"報告日","type":"timestamp","required":true,"description":"日報が対象とする業務日"},{"name":"業務内容","type":"text","required":true,"description":"本日実施した業務の詳細説明"},{"name":"成果","type":"text","required":false,"description":"本日の業務成果・達成事項"},{"name":"課題","type":"text","required":false,"description":"発生した課題・問題点"},{"name":"明日の予定","type":"text","required":false,"description":"翌日の予定・計画"},{"name":"作成日時","type":"timestamp","required":true,"description":"日報が作成された日時"},{"name":"更新日時","type":"timestamp","required":true,"description":"日報が最後に更新された日時"}]},{"tableName":"日報リマインダー設定","purpose":"ユーザーごとの日報提出リマインダーの配信設定を管理し、リマインダー送信の有効/無効、送信時刻、送信頻度などを制御する","columns":[{"name":"リマインダー設定ID","type":"uuid","required":true,"description":"リマインダー設定の一意識別子"},{"name":"ユーザーID","type":"uuid","required":true,"description":"ユーザーテーブルへの外部キー参照"},{"name":"有効フラグ","type":"boolean","required":true,"description":"リマインダー配信の有効/無効を示すフラグ"},{"name":"送信時刻","type":"varchar(5)","required":true,"description":"リマインダー送信時刻をHH:MM形式で指定"},{"name":"送信曜日","type":"varchar(100)","required":false,"description":"リマインダー送信対象の曜日をカンマ区切りで指定(例:月,火,水,木,金)"},{"name":"送信方法","type":"varchar(100)","required":true,"description":"リマインダー送信方法(メール、アプリ通知など)"},{"name":"作成日時","type":"timestamp","required":true,"description":"設定レコードの作成日時"},{"name":"更新日時","type":"timestamp","required":true,"description":"設定レコードの最終更新日時"}]},{"tableName":"日報未提出者検知ログ","purpose":"日報の未提出者を検知した際のログを記録し、リマインダー送信履歴や未提出状況の追跡を管理するテーブル","columns":[{"name":"検知ログID","type":"uuid","required":true,"description":"検知ログの一意識別子"},{"name":"ユーザーID","type":"uuid","required":true,"description":"未提出者のユーザーID、ユーザーテーブルへの外部キー"},{"name":"対象日付","type":"timestamp","required":true,"description":"未提出となっている日報の対象日付"},{"name":"検知日時","type":"timestamp","required":true,"description":"未提出を検知した日時"},{"name":"リマインダー送信済み","type":"boolean","required":true,"description":"リマインダーが送信されたかどうかを示すフラグ"},{"name":"リマインダー送信日時","type":"timestamp","required":false,"description":"リマインダーを送信した日時、未送信の場合はNULL"},{"name":"提出状況","type":"varchar(100)","required":true,"description":"未提出、提出済み、期限超過などの提出状況を示す値"},{"name":"作成日時","type":"timestamp","required":true,"description":"ログレコードの作成日時"},{"name":"更新日時","type":"timestamp","required":true,"description":"ログレコードの最終更新日時"}]},{"tableName":"メール送信履歴","purpose":"日報管理システムにおけるメール送信の記録を管理し、送信状況の追跡、再送信の判定、送信失敗の原因分析を行うための履歴テーブル","columns":[{"name":"メール送信履歴ID","type":"uuid","required":true,"description":"メール送信履歴の一意識別子"},{"name":"ユーザーID","type":"uuid","required":true,"description":"メール送信対象のユーザーID、ユーザーテーブルへの外部キー"},{"name":"メールタイプ","type":"varchar(100)","required":true,"description":"メールの種類（リマインダー、未提出通知など）"},{"name":"送信先メールアドレス","type":"varchar(100)","required":true,"description":"実際に送信されたメールアドレス"},{"name":"件名","type":"varchar(100)","required":true,"description":"メールの件名"},{"name":"本文","type":"text","required":true,"description":"メールの本文内容"},{"name":"送信日時","type":"timestamp","required":true,"description":"メール送信実行日時"},{"name":"送信ステータス","type":"varchar(100)","required":true,"description":"送信結果（成功、失敗、保留中など）"},{"name":"エラーメッセージ","type":"text","required":false,"description":"送信失敗時のエラー内容"},{"name":"関連日報ID","type":"uuid","required":false,"description":"関連する日報ID、日報テーブルへの外部キー"},{"name":"関連リマインダー設定ID","type":"uuid","required":false,"description":"関連するリマインダー設定ID、日報リマインダー設定テーブルへの外部キー"},{"name":"再送信フラグ","type":"boolean","required":true,"description":"再送信対象かどうかを示すフラグ"},{"name":"作成日時","type":"timestamp","required":true,"description":"レコード作成日時"}]}];
+window.AIVIC_PRESET_SEED = {"ユーザー":[{"ユーザーID":"rec-001","ユーザー名":"admin_tanaka","メールアドレス":"tanaka.taro@company.jp","氏名":"田中太郎","部門":"情報システム部","役割":"管理者","ステータス":"有効","作成日時":"2024-01-15T09:30:00+09:00","更新日時":"2025-01-10T14:22:00+09:00","作成者":"システム初期化"},{"ユーザーID":"rec-001","ユーザー名":"tanaka.taro","メールアドレス":"tanaka.taro@company.co.jp","氏名":"田中太郎","部門":"営業部","役割":"マネージャー","ステータス":"有効","作成日時":"2024-04-01 09:30:00","更新日時":"2025-01-15 14:22:00","作成者":"admin"},{"ユーザーID":"rec-001","ユーザー名":"tanaka.taro","メールアドレス":"tanaka.taro@company.jp","氏名":"田中太郎","部門":"営業部","役割":"一般","ステータス":"有効","作成日時":"2024-04-01T09:30:00+09:00","更新日時":"2024-12-15T14:22:00+09:00","作成者":"佐藤花子"},{"ユーザーID":"rec-001","ユーザー名":"tanaka.hanako","メールアドレス":"tanaka.hanako@company.jp","氏名":"田中花子","部門":"企画部","役割":"マネージャー","ステータス":"有効","作成日時":"2024-04-01 09:30:00","更新日時":"2025-01-15 14:22:00","作成者":"admin"},{"ユーザーID":"rec-001","ユーザー名":"tanaka.hanako","メールアドレス":"tanaka.hanako@company.jp","氏名":"田中花子","部門":"企画部","役割":"一般","ステータス":"有効","作成日時":"2024-04-01T09:30:00","更新日時":"2025-01-15T14:22:00","作成者":"suzuki.taro"},{"ユーザーID":"rec-001","ユーザー名":"yamada.hanako","メールアドレス":"yamada.hanako@company.jp","氏名":"山田花子","部門":"営業部","役割":"マネージャー","ステータス":"無効","作成日時":"2023-06-15 09:30:00","更新日時":"2024-11-20 14:15:00","作成者":"admin"},{"ユーザーID":"rec-001","ユーザー名":"tanaka.taro","メールアドレス":"tanaka.taro@company.jp","氏名":"田中太郎","部門":"営業部","役割":"マネージャー","ステータス":"無効","作成日時":"2023-04-10 09:30:00","更新日時":"2025-01-31 14:15:00","作成者":"admin"},{"ユーザーID":"rec-001","ユーザー名":"yamada.hanako","メールアドレス":"yamada.hanako@company.jp","氏名":"山田花子","部門":"営業部","役割":"一般","ステータス":"有効","作成日時":"2025-01-15 09:30:00","更新日時":"2025-01-15 09:30:00","作成者":"佐藤太郎"},{"ユーザーID":"rec-001","ユーザー名":"tanaka.taro","メールアドレス":"tanaka.taro@company.co.jp","氏名":"田中太郎","部門":"営業部","役割":"マネージャー","ステータス":"有効","作成日時":"2023-06-15 09:30:00","更新日時":"2025-01-20 14:45:00","作成者":"admin"},{"ユーザーID":"rec-001","ユーザー名":"tanaka.taro","メールアドレス":"tanaka.taro@company.jp","氏名":"田中太郎","部門":"営業部","役割":"マネージャー","ステータス":"有効","作成日時":"2023-06-15 09:30:00","更新日時":"2025-01-10 14:22:00","作成者":"yamada.hanako"}],"日報":[{"日報ID":"rec-001","ユーザーID":"usr-047","報告日":"2024-11-28T00:00:00Z","業務内容":"株式会社サトウ電機との契約更新交渉。営業担当者3名で訪問し、新年度の取引条件について協議。","成果":"契約金額を前年度比8%増の2,400万円で基本合意。納期短縮要件も条件付きで受け入れ可能との見通しを得た。","課題":"支払い条件で顧客が現金払い比率の引き上げを要求。社内決裁権限の確認が必要。","明日の予定":"見積書・契約書案の修正版を顧客へ送付。来週中の正式契約締結を目指す。","作成日時":"2024-11-28T18:45:00Z","更新日時":"2024-11-28T18:45:00Z"},{"日報ID":"rec-001","ユーザーID":"usr-047","報告日":"2024-12-20","業務内容":"ユーザー認証機能の実装完了。OAuth2.0統合、トークン管理、セッション制御の全モジュール実装。","成果":"認証機能実装100%完了。単体テスト合格率98%。本フェーズの全タスク完了し次フェーズへ引き継ぎ可能な状態に。","課題":"トークンリフレッシュ処理でエッジケース発見。対応は次フェーズで実施予定。","明日の予定":"認証機能の詳細ドキュメント作成。次フェーズ担当者への引き継ぎ打ち合わせ実施。","作成日時":"2024-12-20T18:35:00+09:00","更新日時":"2024-12-20T18:35:00+09:00"},{"日報ID":"rec-001","ユーザーID":"user-047","報告日":"2025-01-31T00:00:00Z","業務内容":"1月度月次決算業務を実施。売上・仕入帳簿の集計、経費按分処理、固定資産台帳との照合を進めた。","成果":"売上帳簿と請求書の照合完了（金額ベース99.8%一致）。経費按分3部門分の計上完了。","課題":"買掛金帳簿で仕入先A社との金額不一致が発生。先方への確認待ち状態（差異額約24万円）。","明日の予定":"買掛金不一致の原因究明。未処理の請求書チェック。固定資産減価償却計算の最終確認。","作成日時":"2025-02-01T09:15:00Z","更新日時":"2025-02-01T09:15:00Z"},{"日報ID":"rec-001","ユーザーID":"user-047","報告日":"2024-12-19T00:00:00Z","業務内容":"顧客からの電話・メール問い合わせ対応。製品の使用方法、請求内容、トラブルシューティングなど計23件処理。","成果":"問い合わせ対応23件完了。顧客満足度調査で「対応が丁寧」の評価が前週比+8%向上。","課題":"夕方16時以降の問い合わせ件数が集中し、平均対応時間が12分超過。回答テンプレートの整備が必要。","明日の予定":"よくある質問FAQの更新作業。新入スタッフの研修対応。問い合わせ対応15件程度を予定。","作成日時":"2024-12-19T18:45:00Z","更新日時":"2024-12-19T18:45:00Z"},{"日報ID":"rec-001","ユーザーID":"user-047","報告日":"2024-11-28","業務内容":"新製品『CloudSync Pro』のキャンペーン企画案作成、SNS・動画広告の構成検討、媒体社3社との打ち合わせ実施","成果":"キャンペーンコンセプト案を確定、YouTube・TikTok・Instagramの媒体配置を決定、11月30日の企画承認会議資料を80%完成","課題":"テレビCM枠の年末特別料金が予算上限を5%超過、代理店との交渉が必要","明日の予定":"TV枠の代替案検討、デザイナーチームとの素材制作打ち合わせ、経営層への予算調整申請","作成日時":"2024-11-28T18:35:00+09:00","更新日時":"2024-11-28T18:35:00+09:00"},{"日報ID":"rec-001","ユーザーID":"usr-0847","報告日":"2024-11-15T00:00:00Z","業務内容":"営業職2名、企画職1名の採用面接を実施。各候補者に対して職務経歴、適性、組織文化への適合性を評価。","成果":"営業職候補者A（山田花子）は営業経験5年で目標達成意欲が高く、評価スコア85点で採用推奨。","課題":"企画職候補者は提案内容の具体性に欠け、評価スコア62点で判断保留。追加面接の検討が必要。","明日の予定":"採用推奨者への条件提示、保留候補者の追加面接日程調整、面接評価報告書の作成完了。","作成日時":"2024-11-15T17:30:00Z","更新日時":"2024-11-15T17:30:00Z"},{"日報ID":"rec-001","ユーザーID":"usr-0847","報告日":"2024-12-19T00:00:00Z","業務内容":"製品ロット#2024-1847の全数検査実施。外観検査、寸法測定、動作確認を完了。","成果":"検査数1,250個、合格率98.4%。不具合2件を早期発見し製造部に報告。","課題":"測定機器の校正ズレが疑われる。精度確認が必要。","明日の予定":"測定機器の定期校正実施。前日不具合品の再検査対応。","作成日時":"2024-12-19T17:45:00Z","更新日時":"2024-12-19T17:45:00Z"},{"日報ID":"rec-001","ユーザーID":"usr-047","報告日":"2024-11-15T00:00:00Z","業務内容":"SaaS型CRM市場の需要動向調査、競合5社（salesforce、HubSpot、kintone、Zoho、Microsoft365）の機能・価格比較分析を実施","成果":"中堅企業向けCRM市場は年率12%成長、当社ターゲット層では価格帯3〜8万円/月が主流であることを確認。競合比較表を作成し営業資料として活用可能な状態に","課題":"HubSpotの日本語対応範囲が想定より広く、当社の差別化ポイント再検討が必要。また調査対象企業の最新機能情報取得に時間を要した","明日の予定":"営業部との打ち合わせで調査結果を共有、Q1提案資料への反映方針を協議予定","作成日時":"2024-11-15T18:30:00Z","更新日時":"2024-11-15T18:30:00Z"},{"日報ID":"rec-001","ユーザーID":"user-047","報告日":"2024-11-15T00:00:00Z","業務内容":"A-Line生産ラインの月間生産計画進捗確認。部品納入遅延対応で代替仕入先との調整。","成果":"予定数量の94%を生産完了。納入遅延部品の代替品確保で生産スケジュール維持。","課題":"プレス機械No.3の油圧系統から異音が発生。明朝の定期点検で詳細確認予定。","明日の予定":"プレス機械の保守点検実施。B-Line生産開始準備。顧客納期確認会議14時。","作成日時":"2024-11-15T18:45:00Z","更新日時":"2024-11-15T18:45:00Z"},{"日報ID":"rec-001","ユーザーID":"usr-0847","報告日":"2024-12-19T00:00:00Z","業務内容":"A社からの追加注文3件の受注入力、納期確認、在庫状況の確認と手配依頼","成果":"A社3件の受注処理完了。納期短縮要望に対し製造部と調整し2日前倒し対応を実現","課題":"B社からの急な納期変更要望で既に手配済み部材の対応に時間を要した","明日の予定":"C社との納期調整会議、月末締め処理の確認、受注伝票の整理","作成日時":"2024-12-19T18:45:00Z","更新日時":"2024-12-19T18:45:00Z"}],"日報リマインダー設定":[{"リマインダー設定ID":"rec-001","ユーザーID":"usr-0847","有効フラグ":true,"送信時刻":"09:00","送信曜日":"月,火,水,木,金","送信方法":"メール","作成日時":"2024-10-15 14:30:00","更新日時":"2024-10-15 14:30:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"user-2024-0847","有効フラグ":true,"送信時刻":"17:00","送信曜日":"月,火,水,木,金","送信方法":"アプリ通知","作成日時":"2024-10-15T09:30:00+09:00","更新日時":"2024-10-15T09:30:00+09:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"usr-2024-0847","有効フラグ":true,"送信時刻":"22:00","送信曜日":"月,火,水,木,金","送信方法":"メール","作成日時":"2024-11-15 09:30:00","更新日時":"2024-11-15 09:30:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"user-2024-0847","有効フラグ":true,"送信時刻":"10:00","送信曜日":"月,火,水,木,金","送信方法":"メール","作成日時":"2024-11-15T09:30:00+09:00","更新日時":"2024-11-15T09:30:00+09:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"user-2847","有効フラグ":true,"送信時刻":"07:00","送信曜日":"月,火,水,木,金","送信方法":"メール","作成日時":"2024-11-15T09:30:00+09:00","更新日時":"2025-01-10T14:22:00+09:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"usr-2024-0847","有効フラグ":true,"送信時刻":"18:00","送信曜日":"月,火,水,木,金","送信方法":"アプリ通知","作成日時":"2024-10-15T09:30:00+09:00","更新日時":"2024-10-15T09:30:00+09:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"user-20250401-001","有効フラグ":true,"送信時刻":"11:30","送信曜日":"月,火,水,木,金,土,日","送信方法":"メール","作成日時":"2025-04-01T09:15:00+09:00","更新日時":"2025-04-01T09:15:00+09:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"user-0847","有効フラグ":true,"送信時刻":"08:00","送信曜日":"月","送信方法":"メール","作成日時":"2024-10-15T09:30:00+09:00","更新日時":"2024-10-15T09:30:00+09:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"user-2024-0847","有効フラグ":true,"送信時刻":"15:00","送信曜日":"金","送信方法":"アプリ通知","作成日時":"2024-10-15T09:30:00+09:00","更新日時":"2025-01-08T14:20:00+09:00"},{"リマインダー設定ID":"rec-001","ユーザーID":"usr-0847","有効フラグ":false,"送信時刻":"09:00","送信曜日":"月,火,水,木,金","送信方法":"メール","作成日時":"2024-04-15T10:30:00","更新日時":"2025-01-22T14:15:00"}],"日報未提出者検知ログ":[{"検知ログID":"rec-001","ユーザーID":"usr-0847","対象日付":"2024-12-01","検知日時":"2024-12-02 09:15:00","リマインダー送信済み":false,"リマインダー送信日時":null,"提出状況":"提出済み","作成日時":"2024-12-02 09:15:00","更新日時":"2024-12-02 10:30:00"},{"検知ログID":"rec-001","ユーザーID":"usr-0847","対象日付":"2025-01-15","検知日時":"2025-01-16 09:30:00","リマインダー送信済み":true,"リマインダー送信日時":"2025-01-16 10:15:00","提出状況":"期限超過","作成日時":"2025-01-16 09:30:00","更新日時":"2025-01-16 10:15:00"},{"検知ログID":"rec-001","ユーザーID":"usr-0847","対象日付":"2024-12-20","検知日時":"2024-12-21 09:15:00","リマインダー送信済み":true,"リマインダー送信日時":"2024-12-21 09:30:00","提出状況":"提出済み","作成日時":"2024-12-21 09:15:00","更新日時":"2024-12-21 14:45:00"},{"検知ログID":"rec-001","ユーザーID":"usr-0847","対象日付":"2024-12-20","検知日時":"2024-12-21 09:15:00","リマインダー送信済み":true,"リマインダー送信日時":"2025-01-08 14:30:00","提出状況":"期限超過","作成日時":"2024-12-21 09:15:00","更新日時":"2025-01-08 14:30:00"},{"検知ログID":"rec-001-2024-1847","ユーザーID":"rec-user-2847","対象日付":"2024-11-15T00:00:00Z","検知日時":"2024-11-16T09:30:00Z","リマインダー送信済み":false,"リマインダー送信日時":null,"提出状況":"提出済み","作成日時":"2024-11-16T09:30:00Z","更新日時":"2024-11-18T14:22:00Z"},{"検知ログID":"rec-001","ユーザーID":"usr-2024-0847","対象日付":"2024-04-15","検知日時":"2024-04-16 09:30:00","リマインダー送信済み":true,"リマインダー送信日時":"2024-04-16 09:35:00","提出状況":"未提出","作成日時":"2024-04-16 09:30:00","更新日時":"2024-04-16 09:35:00"},{"検知ログID":"rec-001","ユーザーID":"user-0847","対象日付":"2024-12-20","検知日時":"2024-12-20 09:15:00","リマインダー送信済み":false,"リマインダー送信日時":null,"提出状況":"未提出","作成日時":"2024-12-20 09:15:00","更新日時":"2024-12-20 09:15:00"},{"検知ログID":"rec-001","ユーザーID":"usr-0847","対象日付":"2024-08-15","検知日時":"2024-08-16 09:30:00","リマインダー送信済み":true,"リマインダー送信日時":"2024-08-16 10:15:00","提出状況":"期限超過","作成日時":"2024-08-16 09:30:00","更新日時":"2024-10-02 14:22:00"},{"検知ログID":"rec-001","ユーザーID":"usr-2847","対象日付":"2025-01-15T00:00:00Z","検知日時":"2025-01-16T09:30:00Z","リマインダー送信済み":false,"リマインダー送信日時":null,"提出状況":"未提出","作成日時":"2025-01-16T09:30:00Z","更新日時":"2025-01-16T09:30:00Z"},{"検知ログID":"rec-001","ユーザーID":"usr-2024-0847","対象日付":"2024-12-19","検知日時":"2024-12-20 09:15:00","リマインダー送信済み":true,"リマインダー送信日時":"2024-12-20 09:30:00","提出状況":"未提出","作成日時":"2024-12-20 09:15:00","更新日時":"2024-12-20 09:30:00"}],"メール送信履歴":[{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-0847","メールタイプ":"未提出通知","送信先メールアドレス":"tanaka.taro@company.jp","件名":"【リマインダー】本日の日報提出をお願いします","本文":"田中太郎様、本日の日報がまだ提出されていません。本日中のご提出をお願いします。","送信日時":"2025-01-15 17:30:00","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":"rec-d-2501-0847","関連リマインダー設定ID":"rec-r-0012","再送信フラグ":false,"作成日時":"2025-01-15 17:30:00"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-002","メールタイプ":"未提出通知","送信先メールアドレス":"tanaka.taro@company.jp","件名":"【重要】本日の日報提出をお願いします（2回目通知）","本文":"田中太郎様、本日分の日報がまだ提出されていません。営業時間終了までにご提出ください。","送信日時":"2024-12-19 17:30:00","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":"rec-003","関連リマインダー設定ID":"rec-004","再送信フラグ":false,"作成日時":"2024-12-19 17:30:15"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-042","メールタイプ":"未提出通知","送信先メールアドレス":"tanaka.taro@company.jp","件名":"【重要】本日の日報提出をお忘れではありませんか？","本文":"田中太郎様へのリマインダーメール。本日中の日報提出をお願いします。","送信日時":"2024-11-15 18:30:00","送信ステータス":"失敗","エラーメッセージ":"メールサーバー接続タイムアウト：SMTP接続エラー（553 Relay access denied）","関連日報ID":"rec-d-1847","関連リマインダー設定ID":"rec-rm-156","再送信フラグ":true,"作成日時":"2024-11-15 18:30:15"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-0042","メールタイプ":"未提出通知","送信先メールアドレス":"tanaka.taro@example.co.jp","件名":"【重要】2024年12月15日の日報提出期限が迫っています","本文":"田中太郎様、本日中に日報のご提出をお願いいたします。","送信日時":"2024-12-15 17:30:00","送信ステータス":"失敗","エラーメッセージ":"550 User not found: tanaka.taro@example.co.jp - メールアドレスが無効化されているか削除されています","関連日報ID":"rec-d-1847","関連リマインダー設定ID":"rec-rm-0156","再送信フラグ":true,"作成日時":"2024-12-15 17:30:15"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-0042","メールタイプ":"日報承認完了通知","送信先メールアドレス":"tanaka.taro@company.jp","件名":"【日報承認完了】2025年1月15日分の日報が承認されました","本文":"田中太郎様へお疲れ様です。ご提出いただいた2025年1月15日分の日報が承認されました。詳細はシステムでご確認ください。","送信日時":"2025-01-16 09:30:45","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":"rec-d-1847","関連リマインダー設定ID":null,"再送信フラグ":false,"作成日時":"2025-01-16 09:30:45"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-042","メールタイプ":"未提出通知","送信先メールアドレス":"admin@company.jp","件名":"【日報未提出サマリー】2025年1月15日時点","本文":"本日時点で未提出の日報が3件あります。対象者：田中太郎、佐藤花子、鈴木一郎。詳細はシステムをご確認ください。","送信日時":"2025-01-15 09:30:00","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":null,"関連リマインダー設定ID":"rec-rm-008","再送信フラグ":false,"作成日時":"2025-01-15 09:30:00"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-002","メールタイプ":"未提出通知","送信先メールアドレス":"tanaka.taro@company.jp","件名":"【再送】本日の日報提出をお願いします","本文":"田中太郎様、本日の日報提出期限は18:00です。まだ提出されていないようですので、お手数ですがご提出ください。","送信日時":"2024-11-15 14:30:00","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":"rec-003","関連リマインダー設定ID":"rec-004","再送信フラグ":true,"作成日時":"2024-11-15 14:30:00"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-042","メールタイプ":"リマインダー","送信先メールアドレス":"tanaka.taro@company.jp","件名":"【リマインダー】本日の日報提出をお願いします","本文":"田中太郎様、本日の日報提出期限は18時です。まだ提出されていない場合はお早めにお願いします。","送信日時":"2024-11-15 17:30:00","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":"rec-d-1847","関連リマインダー設定ID":"rec-rs-156","再送信フラグ":false,"作成日時":"2024-11-15 17:15:00"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-042","メールタイプ":"リマインダー","送信先メールアドレス":"tanaka.taro@company.jp","件名":"【リマインダー】本日中に日報提出をお願いします","本文":"田中太郎様、本日の日報提出期限は17:00です。まだ提出されていない場合はお早めにお願いします。","送信日時":"2024-11-15 16:30:00","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":"rec-d-1847","関連リマインダー設定ID":"rec-rm-203","再送信フラグ":false,"作成日時":"2024-11-15 16:30:15"},{"メール送信履歴ID":"rec-001","ユーザーID":"rec-u-042","メールタイプ":"退職者メール送信停止通知","送信先メールアドレス":"tanaka.taro@company.com","件名":"【重要】メール送信サービスの停止について","本文":"田中太郎様の退職に伴い、本システムからのメール送信を2025年1月31日をもって停止いたします。","送信日時":"2025-01-30 09:15:00","送信ステータス":"成功","エラーメッセージ":null,"関連日報ID":null,"関連リマインダー設定ID":null,"再送信フラグ":false,"作成日時":"2025-01-30 09:15:00"}]};
+window.AIVIC_PAGE_SCREEN_ID = "scr-1789983420567";
+window.AIVIC_PAGE_INIT_JS = "function(container, apiUrl, tables) {\n  const statusMsg = container.querySelector('#status-message');\n  const detailModal = container.querySelector('#detail-modal-overlay');\n  const reminderModal = container.querySelector('#reminder-confirm-overlay');\n  const closeDetailBtn = container.querySelector('#close-detail-modal');\n  const cancelReminderBtn = container.querySelector('#cancel-reminder-btn');\n  const confirmReminderBtn = container.querySelector('#confirm-reminder-btn');\n  const sendReminderAllBtn = container.querySelector('[data-testid=\"send-reminder-all-btn\"]');\n  const saveSettingsBtn = container.querySelector('[data-testid=\"save-reminder-settings-btn\"]');\n  const searchInput = container.querySelector('[data-testid=\"search-submitted\"]');\n  const reminderTimeInput = container.querySelector('#reminder-time');\n  const reminderMethodSelect = container.querySelector('[data-testid=\"reminder-method-select\"]');\n\n  let currentReminderTarget = null; // 'single' or 'all'\n  let currentReminderUserId = null;\n\n  // Show status message\n  function showStatus(msg, duration = 5000) {\n    statusMsg.textContent = msg;\n    statusMsg.style.display = 'block';\n    setTimeout(() => {\n      statusMsg.style.display = 'none';\n    }, duration);\n  }\n\n  // Close modals\n  function closeModals() {\n    detailModal.style.display = 'none';\n    reminderModal.style.display = 'none';\n  }\n\n  closeDetailBtn.addEventListener('click', closeModals);\n  cancelReminderBtn.addEventListener('click', closeModals);\n  \n  // Close on overlay click\n  detailModal.addEventListener('click', (e) => {\n    if (e.target === detailModal) closeModals();\n  });\n  reminderModal.addEventListener('click', (e) => {\n    if (e.target === reminderModal) closeModals();\n  });\n\n  // Load submitted reports\n  async function loadSubmittedReports() {\n    const tbody = container.querySelector('#submitted-tbody');\n    const countEl = container.querySelector('[data-testid=\"submitted-count\"]');\n    \n    const reports = await window.aivicApi.list(1); // Table index 1: 日報\n    if (!reports) {\n      tbody.innerHTML = '<tr style=\"background: var(--bg-main); color: var(--text-muted); text-align: center;\"><td colspan=\"4\" style=\"padding: 20px; font-size: 12px;\">データ取得に失敗しました</td></tr>';\n      return;\n    }\n\n    const users = await window.aivicApi.list(0); // Table index 0: ユーザー\n    const userMap = {};\n    if (users) {\n      users.forEach(u => {\n        userMap[u.id] = u;\n      });\n    }\n\n    // Filter by today\n    const today = new Date().toISOString().split('T')[0];\n    const todayReports = reports.filter(r => {\n      const reportDate = new Date(r.created_at).toISOString().split('T')[0];\n      return reportDate === today;\n    });\n\n    countEl.textContent = todayReports.length + '件';\n\n    if (todayReports.length === 0) {\n      tbody.innerHTML = '<tr style=\"background: var(--bg-main); color: var(--text-muted); text-align: center;\"><td colspan=\"4\" style=\"padding: 20px; font-size: 12px;\">本日の提出済み日報はありません</td></tr>';\n      return;\n    }\n\n    tbody.innerHTML = todayReports.map(r => {\n      const user = userMap[r.user_id];\n      const userName = user ? user.name : '不明';\n      const submittedTime = new Date(r.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });\n      const workSummary = (r.work_content || '').substring(0, 50) + (r.work_content && r.work_content.length > 50 ? '...' : '');\n\n      return `\n        <tr data-id=\"${r.id}\" style=\"background: var(--bg-card); border-bottom: 1px solid var(--border); transition: background-color var(--motion-duration);\">\n          <td style=\"padding: 10px; color: var(--text); font-size: 13px;\">${userName}</td>\n          <td style=\"padding: 10px; color: var(--text); font-size: 13px;\">${submittedTime}</td>\n          <td style=\"padding: 10px; color: var(--text); font-size: 13px;\">${workSummary}</td>\n          <td style=\"padding: 10px; text-align: center;\">\n            <button class=\"view-detail-btn\" data-id=\"${r.id}\" style=\"background: transparent; border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: var(--radius-control); font-size: 12px; cursor: pointer; transition: all var(--motion-duration);\">\n              詳細\n            </button>\n          </td>\n        </tr>\n      `;\n    }).join('');\n\n    // Attach detail button listeners\n    container.querySelectorAll('.view-detail-btn').forEach(btn => {\n      btn.addEventListener('click', (e) => {\n        const reportId = e.target.dataset.id;\n        const report = reports.find(r => r.id === reportId);\n        if (report) {\n          const user = userMap[report.user_id];\n          container.querySelector('#detail-reporter').textContent = user ? user.name : '不明';\n          container.querySelector('#detail-date').textContent = new Date(report.created_at).toLocaleDateString('ja-JP');\n          container.querySelector('#detail-content').textContent = report.work_content || '-';\n          detailModal.style.display = 'flex';\n        }\n      });\n    });\n\n    // Hover effect\n    container.querySelectorAll('#submitted-tbody tr').forEach(tr => {\n      tr.addEventListener('mouseenter', () => {\n        tr.style.backgroundColor = '#f3f4f6';\n      });\n      tr.addEventListener('mouseleave', () => {\n        tr.style.backgroundColor = 'var(--bg-card)';\n      });\n    });\n  }\n\n  // Load unsubmitted users\n  async function loadUnsubmittedUsers() {\n    const tbody = container.querySelector('#unsubmitted-tbody');\n    const countEl = container.querySelector('[data-testid=\"unsubmitted-count\"]');\n\n    const logs = await window.aivicApi.list(3); // Table index 3: 日報未提出者検知ログ\n    if (!logs) {\n      tbody.innerHTML = '<tr style=\"background: var(--bg-main); color: var(--text-muted); text-align: center;\"><td colspan=\"3\" style=\"padding: 20px; font-size: 12px;\">データ取得に失敗しました</td></tr>';\n      return;\n    }\n\n    const users = await window.aivicApi.list(0); // Table index 0: ユーザー\n    const userMap = {};\n    if (users) {\n      users.forEach(u => {\n        userMap[u.id] = u;\n      });\n    }\n\n    // Filter by today and not submitted\n    const today = new Date().toISOString().split('T')[0];\n    const todayUnsubmitted = logs.filter(log => {\n      const logDate = new Date(log.target_date).toISOString().split('T')[0];\n      return logDate === today && log.submission_status === 'unsubmitted';\n    });\n\n    // Deduplicate by user_id\n    const uniqueUsers = {};\n    todayUnsubmitted.forEach(log => {\n      if (!uniqueUsers[log.user_id]) {\n        uniqueUsers[log.user_id] = log;\n      }\n    });\n\n    const unsubmittedList = Object.values(uniqueUsers);\n    countEl.textContent = unsubmittedList.length + '件';\n\n    if (unsubmittedList.length === 0) {\n      tbody.innerHTML = '<tr style=\"background: var(--bg-main); color: var(--text-muted); text-align: center;\"><td colspan=\"3\" style=\"padding: 20px; font-size: 12px;\">未提出者はいません</td></tr>';\n      return;\n    }\n\n    tbody.innerHTML = unsubmittedList.map(log => {\n      const user = userMap[log.user_id];\n      const userName = user ? user.name : '不明';\n      const dept = user ? user.department : '-';\n\n      return `\n        <tr data-id=\"${log.user_id}\" style=\"background: var(--bg-card); border-bottom: 1px solid var(--border); transition: background-color var(--motion-duration);\">\n          <td style=\"padding: 10px; color: var(--text); font-size: 13px;\">${userName}</td>\n          <td style=\"padding: 10px; color: var(--text); font-size: 13px;\">${dept}</td>\n          <td style=\"padding: 10px; text-align: center;\">\n            <button class=\"send-reminder-btn\" data-user-id=\"${log.user_id}\" style=\"background: transparent; border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: var(--radius-control); font-size: 12px; cursor: pointer; transition: all var(--motion-duration);\">\n              送信\n            </button>\n          </td>\n        </tr>\n      `;\n    }).join('');\n\n    // Attach reminder button listeners\n    container.querySelectorAll('.send-reminder-btn').forEach(btn => {\n      btn.addEventListener('click', (e) => {\n        const userId = e.target.dataset.userId;\n        const user = userMap[userId];\n        currentReminderTarget = 'single';\n        currentReminderUserId = userId;\n        container.querySelector('#reminder-confirm-message').textContent = `${user ? user.name : '不明'}さんにリマインダーを送信しますか？`;\n        reminderModal.style.display = 'flex';\n      });\n    });\n\n    // Hover effect\n    container.querySelectorAll('#unsubmitted-tbody tr').forEach(tr => {\n      tr.addEventListener('mouseenter', () => {\n        tr.style.backgroundColor = '#f3f4f6';\n      });\n      tr.addEventListener('mouseleave', () => {\n        tr.style.backgroundColor = 'var(--bg-card)';\n      });\n    });\n  }\n\n  // Send reminder\n  confirmReminderBtn.addEventListener('click', async () => {\n    if (currentReminderTarget === 'single' && currentReminderUserId) {\n      const mailHistory = {\n        user_id: currentReminderUserId,\n        email_type: 'reminder',\n        recipient_email: 'user@example.com',\n        subject: '日報提出のお願い',\n        body: '本日の日報をまだ提出されていません。お手数ですが提出をお願いします。',\n        sent_at: new Date().toISOString(),\n        send_status: 'success'\n      };\n      const saved = await window.aivicApi.save(4, mailHistory); // Table index 4: メール送信履歴\n      if (saved) {\n        showStatus('リマインダーを送信しました');\n        closeModals();\n        loadUnsubmittedUsers();\n      }\n    } else if (currentReminderTarget === 'all') {\n      const logs = await window.aivicApi.list(3);\n      const today = new Date().toISOString().split('T')[0];\n      const todayUnsubmitted = logs.filter(log => {\n        const logDate = new Date(log.target_date).toISOString().split('T')[0];\n        return logDate === today && log.submission_status === 'unsubmitted';\n      });\n\n      let count = 0;\n      for (const log of todayUnsubmitted) {\n        const mailHistory = {\n          user_id: log.user_id,\n          email_type: 'reminder',\n          recipient_email: 'user@example.com',\n          subject: '日報提出のお願い',\n          body: '本日の日報をまだ提出されていません。お手数ですが提出をお願いします。',\n          sent_at: new Date().toISOString(),\n          send_status: 'success'\n        };\n        const saved = await window.aivicApi.save(4, mailHistory);\n        if (saved) count++;\n      }\n      showStatus(`リマインダーを ${count} 件送信しました`);\n      closeModals();\n      loadUnsubmittedUsers();\n    }\n  });\n\n  // Bulk reminder\n  sendReminderAllBtn.addEventListener('click', () => {\n    currentReminderTarget = 'all';\n    const countEl = container.querySelector('[data-testid=\"unsubmitted-count\"]');\n    const count = countEl.textContent;\n    container.querySelector('#reminder-confirm-message').textContent = `未提出者全員（${count}）にリマインダーを送信しますか？`;\n    reminderModal.style.display = 'flex';\n  });\n\n  // Save reminder settings\n  saveSettingsBtn.addEventListener('click', async () => {\n    const time = reminderTimeInput.value;\n    const method = reminderMethodSelect.value;\n    const days = Array.from(container.querySelectorAll('input[type=\"checkbox\"]:checked'))\n      .map(cb => cb.value)\n      .join(',');\n\n    if (!time || !method || !days) {\n      showStatus('すべての項目を入力してください', 3000);\n      return;\n    }\n\n    const settings = {\n      user_id: 'current-user-id', // Should be current logged-in user\n      enabled: true,\n      send_time: time,\n      send_days: days,\n      send_method: method\n    };\n\n    const saved = await window.aivicApi.save(2, settings); // Table index 2: 日報リマインダー設定\n    if (saved) {\n      showStatus('リマインダー設定を保存しました');\n    }\n  });\n\n  // Search submitted reports\n  searchInput.addEventListener('input', async () => {\n    const query = searchInput.value.toLowerCase();\n    const rows = container.querySelectorAll('#submitted-tbody tr');\n    rows.forEach(row => {\n      const reporterName = row.querySelector('td:first-child').textContent.toLowerCase();\n      row.style.display = reporterName.includes(query) ? '' : 'none';\n    });\n  });\n\n  // Initial load\n  loadSubmittedReports();\n  loadUnsubmittedUsers();\n\n  // Refresh every 30 seconds\n  setInterval(() => {\n    loadSubmittedReports();\n    loadUnsubmittedUsers();\n  }, 30000);\n}";
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="shell-wrapper" data-aivic-shell-pattern="sidebar" data-aivic-nav-position="left" data-aivic-density="simple">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <div>
+          <div class="logo">シンプルデイレポート</div>
+          <div class="logo-system">日報管理</div>
+        </div>
+      </div>
+      <div class="top-bar-right">
+        <div class="user-avatar">U</div>
+        <div class="user-name">ユーザー</div>
+        <a href="./login.html" class="logout-link">ログアウト</a>
+      </div>
+    </header>
+
+    <div class="main-container">
+      <aside class="sidebar scrollbar-thin">
+        <div class="nav-section">
+          <div class="nav-section-title">業務</div>
+          <a class="nav-item aivic-active" data-aivic-nav="scr-1789983412165" href="./scr-1789983412165.html">日報入力</a>
+          <a class="nav-item" data-aivic-nav="scr-1789983420567" href="./scr-1789983420567.html">日報確認・管理</a>
+        </div>
+      </aside>
+
+      <main class="content-area scrollbar-thin">
+        <div data-aivic-panel="scr-1789983412165" style="display:none"></div>
+        <div data-aivic-panel="scr-1789983420567" style="display:block"><div style="display: flex; flex-direction: column; height: 100%; background: var(--bg-main);">
+  <!-- Breadcrumb / Sub-header -->
+  <div style="padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-card); font-size: 12px; color: var(--text-muted);">
+    シンプルデイレポート / 日報管理システム / 日報確認・管理画面
+  </div>
+
+  <!-- Main Content -->
+  <div style="flex: 1; overflow-y: auto; padding: 16px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1400px;">
+      
+      <!-- Left Column: Submitted Reports -->
+      <div>
+        <div style="background: var(--bg-card); border-radius: var(--radius-card); padding: 16px; box-shadow: var(--shadow-card); margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h2 style="font-size: 14px; font-weight: 600; color: var(--text); margin: 0;">提出済み日報</h2>
+            <span style="font-size: 12px; color: var(--text-muted);" data-testid="submitted-count">0件</span>
+          </div>
+          
+          <!-- Search / Filter -->
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <input 
+              type="text" 
+              placeholder="報告者名で検索..." 
+              data-testid="search-submitted"
+              style="flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-card); color: var(--text); font-size: 13px; font-family: var(--font-family);"
+            />
+          </div>
+
+          <!-- Submitted Reports Table -->
+          <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
+            <table data-testid="submitted-reports-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: var(--primary); color: #fff; position: sticky; top: 0;">
+                  <th style="padding: 10px; text-align: left; font-weight: 600; border-bottom: 1px solid var(--border);">報告者</th>
+                  <th style="padding: 10px; text-align: left; font-weight: 600; border-bottom: 1px solid var(--border);">提出時刻</th>
+                  <th style="padding: 10px; text-align: left; font-weight: 600; border-bottom: 1px solid var(--border);">業務内容</th>
+                  <th style="padding: 10px; text-align: center; font-weight: 600; border-bottom: 1px solid var(--border); width: 60px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="submitted-tbody">
+                <tr style="background: var(--bg-main); color: var(--text-muted); text-align: center;">
+                  <td colspan="4" style="padding: 20px; font-size: 12px;">読込中...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Unsubmitted Users & Reminder Settings -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        
+        <!-- Unsubmitted Users Section -->
+        <div style="background: var(--bg-card); border-radius: var(--radius-card); padding: 16px; box-shadow: var(--shadow-card);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h2 style="font-size: 14px; font-weight: 600; color: var(--text); margin: 0;">未提出者</h2>
+            <span style="font-size: 12px; color: var(--text-muted);" data-testid="unsubmitted-count">0件</span>
+          </div>
+
+          <!-- Unsubmitted Users Table -->
+          <div class="table-wrap" style="max-height: 300px; overflow-y: auto; margin-bottom: 12px;">
+            <table data-testid="unsubmitted-users-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <thead>
+                <tr style="background: var(--primary); color: #fff; position: sticky; top: 0;">
+                  <th style="padding: 10px; text-align: left; font-weight: 600; border-bottom: 1px solid var(--border);">報告者</th>
+                  <th style="padding: 10px; text-align: left; font-weight: 600; border-bottom: 1px solid var(--border);">部門</th>
+                  <th style="padding: 10px; text-align: center; font-weight: 600; border-bottom: 1px solid var(--border); width: 60px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="unsubmitted-tbody">
+                <tr style="background: var(--bg-main); color: var(--text-muted); text-align: center;">
+                  <td colspan="3" style="padding: 20px; font-size: 12px;">読込中...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Bulk Reminder Button -->
+          <button 
+            class="action-btn" 
+            data-testid="send-reminder-all-btn"
+            style="width: 100%; padding: 10px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius-control); font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color var(--motion-duration);"
+          >
+            全員にリマインダー送信
+          </button>
+        </div>
+
+        <!-- Reminder Settings Section -->
+        <div style="background: var(--bg-card); border-radius: var(--radius-card); padding: 16px; box-shadow: var(--shadow-card);">
+          <h2 style="font-size: 14px; font-weight: 600; color: var(--text); margin: 0 0 12px 0;">リマインダー設定</h2>
+          
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">送信時刻</label>
+              <input 
+                type="time" 
+                id="reminder-time"
+                data-testid="reminder-time-input"
+                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-card); color: var(--text); font-size: 13px; font-family: var(--font-family);"
+              />
+            </div>
+
+            <div>
+              <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">送信曜日</label>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);">
+                  <input type="checkbox" value="月" data-testid="day-mon" style="accent-color: var(--primary);" />
+                  月
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);">
+                  <input type="checkbox" value="火" data-testid="day-tue" style="accent-color: var(--primary);" />
+                  火
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);">
+                  <input type="checkbox" value="水" data-testid="day-wed" style="accent-color: var(--primary);" />
+                  水
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);">
+                  <input type="checkbox" value="木" data-testid="day-thu" style="accent-color: var(--primary);" />
+                  木
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);">
+                  <input type="checkbox" value="金" data-testid="day-fri" style="accent-color: var(--primary);" />
+                  金
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);">
+                  <input type="checkbox" value="土" data-testid="day-sat" style="accent-color: var(--primary);" />
+                  土
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text);">
+                  <input type="checkbox" value="日" data-testid="day-sun" style="accent-color: var(--primary);" />
+                  日
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">送信方法</label>
+              <select 
+                id="reminder-method"
+                data-testid="reminder-method-select"
+                style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-card); color: var(--text); font-size: 13px; font-family: var(--font-family);"
+              >
+                <option value="">選択してください</option>
+                <option value="email">メール</option>
+                <option value="app">アプリ通知</option>
+                <option value="both">メール＆アプリ</option>
+              </select>
+            </div>
+          </div>
+
+          <button 
+            class="action-btn secondary"
+            data-testid="save-reminder-settings-btn"
+            style="width: 100%; padding: 10px; background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-control); font-size: 13px; font-weight: 600; cursor: pointer; transition: all var(--motion-duration);"
+          >
+            設定を保存
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Message -->
+  <div 
+    id="status-message"
+    data-testid="status-message"
+    style="display: none; position: fixed; bottom: 16px; right: 16px; background: var(--primary); color: #fff; padding: 12px 16px; border-radius: var(--radius-control); font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100;"
+  ></div>
+
+  <!-- Report Detail Modal -->
+  <div 
+    id="detail-modal-overlay"
+    class="modal-overlay"
+    style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center;"
+  >
+    <div style="background: var(--bg-card); color: var(--text); padding: 24px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; font-weight: 600; margin: 0;">日報詳細</h3>
+        <button 
+          id="close-detail-modal"
+          style="background: transparent; border: none; font-size: 20px; color: var(--text-muted); cursor: pointer; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;"
+        >
+          ✕
+        </button>
+      </div>
+      
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">報告者</label>
+          <p id="detail-reporter" style="margin: 0; font-size: 13px; color: var(--text);">-</p>
+        </div>
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">報告日</label>
+          <p id="detail-date" style="margin: 0; font-size: 13px; color: var(--text);">-</p>
+        </div>
+        <div>
+          <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">業務内容</label>
+          <p id="detail-content" style="margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; white-space: pre-wrap; word-break: break-word;">-</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reminder Confirmation Modal -->
+  <div 
+    id="reminder-confirm-overlay"
+    class="modal-overlay"
+    style="display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center;"
+  >
+    <div style="background: var(--bg-card); color: var(--text); padding: 24px; border-radius: 8px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+      <h3 style="font-size: 16px; font-weight: 600; margin: 0 0 12px 0;">リマインダー送信確認</h3>
+      <p id="reminder-confirm-message" style="margin: 0 0 20px 0; font-size: 13px; color: var(--text-muted); line-height: 1.5;">-</p>
+      
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button 
+          id="cancel-reminder-btn"
+          style="padding: 8px 16px; background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-control); font-size: 13px; font-weight: 600; cursor: pointer; transition: all var(--motion-duration);"
+        >
+          キャンセル
+        </button>
+        <button 
+          id="confirm-reminder-btn"
+          class="action-btn"
+          style="padding: 8px 16px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius-control); font-size: 13px; font-weight: 600; cursor: pointer; transition: background-color var(--motion-duration);"
+        >
+          送信
+        </button>
+      </div>
+    </div>
+  </div>
+</div></div>
+      </main>
+    </div>
+  </div>
+
+  
+<script>
+(function() {
+  var TABLE_DEFS = window.AIVIC_TABLES || [];
+  var PRESET_SEED = window.AIVIC_PRESET_SEED || {};
+  var SYSTEM_NAME = window.AIVIC_SYSTEM_NAME || "";
+  var APP_ID = window.AIVIC_APP_ID || "";
+  var API_URL = (window.AIVIC_API_URL && window.AIVIC_API_URL !== "REPLACE_WITH_API_URL")
+    ? window.AIVIC_API_URL : window.location.origin;
+
+  // 通知 helper ( SPA 版と同じ )
+  window.aivicNotify = (function() {
+    function ensureContainer() {
+      var c = document.getElementById("aivic-toast-container");
+      if (c) return c;
+      c = document.createElement("div");
+      c.id = "aivic-toast-container";
+      c.style.cssText = "position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:360px;";
+      document.body.appendChild(c);
+      return c;
+    }
+    function show(msg, type) {
+      var c = ensureContainer();
+      var el = document.createElement("div");
+      el.textContent = msg;
+      el.style.cssText = "padding:10px 16px;border-radius:8px;font-size:13px;line-height:1.4;pointer-events:auto;color:#fff;background:" + (type === "error" ? "#dc2626" : "#d97706");
+      c.appendChild(el);
+      setTimeout(function() {
+        el.style.transition = "opacity .3s";
+        el.style.opacity = "0";
+        setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 320);
+      }, type === "error" ? 6000 : 4500);
+    }
+    return {
+      error: function(msg) { show("❌ " + msg, "error"); },
+      warn:  function(msg) { show("⚠️ " + msg, "warn"); },
+    };
+  })();
+
+  // CRUD API ( SPA 版と同じ )
+  window.aivicApi = (function() {
+    function dbErr(op) { window.aivicNotify.error("データベースエラー ( " + op + " ): APIサーバーに接続できません。"); }
+    function newId() { return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(36).slice(2); }
+    function q(i) {
+      var t = TABLE_DEFS[i];
+      var dbP = (window.AIVIC_DB_TYPE && window.AIVIC_DB_TYPE !== "dynamodb") ? "&db=" + encodeURIComponent(window.AIVIC_DB_TYPE) : "";
+      return "?app=" + encodeURIComponent(APP_ID) + "&system=" + encodeURIComponent(SYSTEM_NAME) + "&table=" + encodeURIComponent(t ? t.tableName : "table" + i) + dbP;
+    }
+    return {
+      list: async function(tableIndex) {
+        if (!API_URL) return [];
+        try { var r = await fetch(API_URL + "/api/" + tableIndex + q(tableIndex)); var d = await r.json(); return Array.isArray(d) ? d : (d.items || []); }
+        catch(e) { dbErr("データ取得"); return []; }
+      },
+      save: async function(tableIndex, item) {
+        if (!API_URL) { dbErr("保存"); return null; }
+        var now = new Date().toISOString();
+        var rec = Object.assign({}, item, { id: item.id || newId(), createdAt: item.createdAt || now, updatedAt: now });
+        try { var r = await fetch(API_URL + "/api/" + tableIndex + q(tableIndex), { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(rec) }); return await r.json(); }
+        catch(e) { dbErr("保存"); return null; }
+      },
+      update: async function(tableIndex, id, changes) {
+        if (!API_URL) { dbErr("更新"); return null; }
+        try { var r = await fetch(API_URL + "/api/" + tableIndex + "/" + id + q(tableIndex), { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.assign({}, changes, {updatedAt: new Date().toISOString()})) }); return await r.json(); }
+        catch(e) { dbErr("更新"); return null; }
+      },
+      delete: async function(tableIndex, id) {
+        if (!API_URL) { dbErr("削除"); return {deleted:false}; }
+        try { await fetch(API_URL + "/api/" + tableIndex + "/" + id + q(tableIndex), {method:"DELETE"}); return {deleted:true}; }
+        catch(e) { dbErr("削除"); return {deleted:false}; }
+      },
+    };
+  })();
+
+  // showScreen はマルチページ構成ではページ遷移として動く。
+  var _aivicNavLastTime = 0;
+  var _aivicNavLastTarget = "";
+  var _aivicReady = false;
+  window.showScreen = function(screenId) {
+    if (!screenId) return;
+    if (screenId === window.AIVIC_PAGE_SCREEN_ID) return;
+    var targetPath = './' + encodeURIComponent(screenId) + '.html';
+    var currentName = (window.location.pathname.split('/').pop() || '');
+    if (currentName === (encodeURIComponent(screenId) + '.html') ||
+        currentName === (screenId + '.html')) {
+      return;
+    }
+    var now = Date.now();
+    if (_aivicNavLastTarget === targetPath && (now - _aivicNavLastTime) < 100) {
+      console.warn('[aivic] showScreen 連続呼び出し検知。 無限ループ防止のため抑制:', screenId);
+      return;
+    }
+    if (!_aivicReady) {
+      console.warn('[aivic] DOMContentLoaded 前の showScreen 呼び出し。 抑制:', screenId);
+      return;
+    }
+    _aivicNavLastTime = now;
+    _aivicNavLastTarget = targetPath;
+    window.location.href = targetPath;
+  };
+
+  function seedAllIfEmpty() {
+    if (!API_URL) return Promise.resolve();
+    return Promise.all(TABLE_DEFS.map(function(t, i) {
+      var preset = PRESET_SEED[t.tableName];
+      if (!Array.isArray(preset) || preset.length === 0) return Promise.resolve();
+      return window.aivicApi.list(i).then(function(existing) {
+        if (existing && existing.length > 0) return;
+        return Promise.all(preset.map(function(row) { return window.aivicApi.save(i, row); }));
+      }).catch(function() {});
+    }));
+  }
+
+  // ── 初期表示: このページ専用の panel に initFn を実行 ──
+  document.addEventListener("DOMContentLoaded", function() {
+    setTimeout(function() { _aivicReady = true; }, 1500);
+    var pageScreenId = window.AIVIC_PAGE_SCREEN_ID;
+    if (!pageScreenId) return;
+
+    // AI シェルが SPA 用の初期表示処理を持っていても、マルチページでは
+    // このファイルに割り当てられた画面だけを表示する。
+    document.querySelectorAll('[data-aivic-panel]').forEach(function(panel) {
+      var isCurrent = panel.getAttribute('data-aivic-panel') === pageScreenId;
+      panel.style.display = isCurrent ? 'block' : 'none';
+    });
+
+    document.querySelectorAll('[data-aivic-nav]').forEach(function(btn) {
+      var isActive = btn.getAttribute("data-aivic-nav") === pageScreenId;
+      btn.classList.toggle("aivic-active", isActive);
+      btn.setAttribute("aria-current", isActive ? "page" : "false");
+    });
+
+    var container = document.querySelector('[data-aivic-panel="' + pageScreenId + '"]');
+    if (!container) return;
+
+    // content 要素の hidden 強制除去 ( 2026-05-24 Playwright 大量 fail 対応 )
+    var isModalLike = function(el) {
+      if (!el || !el.classList) return false;
+      var cn = String(el.className || "");
+      if (/\bmodal\b|\bdialog\b|\boverlay\b|\bpopup\b|\bdropdown\b|\btooltip\b/i.test(cn)) return true;
+      var role = el.getAttribute && el.getAttribute("role");
+      if (role === "dialog" || role === "alertdialog" || role === "tooltip" || role === "menu") return true;
+      if (el.hasAttribute && (el.hasAttribute("data-modal") || el.hasAttribute("data-dropdown") || el.hasAttribute("data-popup") || el.hasAttribute("data-aivic-overlay"))) return true;
+      // 【2026-06-25】 class/role が無くても inline で画面を覆う overlay ( position:fixed ) は modal 扱いにして、
+      //  content 強制可視化が誤ってダイアログをロード時に表示してしまわないようにする。
+      if (el.style && el.style.position === "fixed") return true;
+      return false;
+    };
+    var unhideContentElements = function(root) {
+      var all = root.querySelectorAll('.hidden, [hidden], [style*="display:none"], [style*="display: none"]');
+      for (var k = 0; k < all.length; k++) {
+        var el = all[k];
+        if (isModalLike(el)) continue;
+        var p = el.parentElement;
+        var insideModal = false;
+        while (p && p !== root) {
+          if (isModalLike(p)) { insideModal = true; break; }
+          p = p.parentElement;
+        }
+        if (insideModal) continue;
+        el.classList.remove('hidden');
+        el.removeAttribute('hidden');
+        if (el.style && el.style.display === 'none') el.style.display = '';
+      }
+    };
+    try { unhideContentElements(container); } catch (e) { console.warn('[aivic] unhideContent failed:', e); }
+
+    var initJsSource = window.AIVIC_PAGE_INIT_JS;
+    if (!initJsSource) {
+      seedAllIfEmpty();
+      return;
+    }
+    var initFn = null;
+    try {
+      initFn = (new Function("return (" + initJsSource + ")"))();
+    } catch (e) {
+      console.error("[aivic] initJs compile error:", pageScreenId, e);
+      return;
+    }
+    if (typeof initFn !== "function") return;
+
+    seedAllIfEmpty().then(function() {
+      return Promise.all(TABLE_DEFS.map(function(t, i) {
+        return window.aivicApi.list(i)
+          .then(function(records) { return Object.assign({}, t, { records: records }); })
+          .catch(function() { return Object.assign({}, t, { records: [] }); });
+      }));
+    }).then(function(tables) {
+      try { initFn(container, API_URL, tables); } catch (e) { console.error("[aivic] initFn error:", pageScreenId, e); }
+      _aivicReady = true;
+    });
+  });
+
+  // 【2026-06-27 強化・必ず閉じられる保証】 モーダル/ダイアログを確実に閉じる安全網。
+  //  旧版は Esc のみ + セレクタ .overlay が class="modal-overlay" にマッチせず ( クラストークンが別 )
+  //  閉じられなかった ( ユーザー報告 2026-06-27: ダイアログが閉じない ) 。 ① Esc ② オーバーレイ背景クリック
+  //  ③ 閉じる系ボタン の 3 経路で閉じる。 セレクタは複合クラスも拾うよう [class*="overlay"] を含む。
+  //  閉じ方は「開クラス ( active/open/show 等 ) があれば外す ( 再オープン可 ) 、 無ければ inline display:none」。
+  //  modal-header 等の sub-part を誤って隠さないため [class*="modal"] は使わない。
+  var AIVIC_OVERLAY_SELECTOR = '[class*="overlay"],[data-aivic-overlay],[data-modal],[role="dialog"],[role="alertdialog"]';
+  var aivicCloseOverlay = function(el) {
+    if (!el || !el.classList) return;
+    var openClasses = ["active", "open", "show", "visible", "is-open", "is-active", "show-modal"];
+    var removed = false;
+    for (var c = 0; c < openClasses.length; c++) {
+      if (el.classList.contains(openClasses[c])) { el.classList.remove(openClasses[c]); removed = true; }
+    }
+    if (!removed && el.style) el.style.display = "none";
+  };
+  document.addEventListener("keydown", function(e) {
+    if (e.key !== "Escape" && e.keyCode !== 27) return;
+    var ov = document.querySelectorAll(AIVIC_OVERLAY_SELECTOR);
+    for (var i = 0; i < ov.length; i++) aivicCloseOverlay(ov[i]);
+  });
+  document.addEventListener("click", function(e) {
+    var t = e.target;
+    if (!t) return;
+    if (t.closest) {
+      var closer = t.closest('.modal-close,[data-modal-close],[data-close],[data-dismiss]');
+      if (closer) {
+        var oc = closer.closest(AIVIC_OVERLAY_SELECTOR);
+        if (oc) { aivicCloseOverlay(oc); return; }
+      }
+    }
+    // 背景 ( オーバーレイ要素そのもの ) を直接クリックした時のみ閉じる ( モーダル本体クリックでは閉じない ) 。
+    if (t.matches && t.matches(AIVIC_OVERLAY_SELECTOR) && t === e.target) {
+      aivicCloseOverlay(t);
+    }
+  });
+  // 【2026-06-28 強化・ロード時に必ず閉じる】 生成 AI が overlay を初期 display:none にし忘れた場合でも、
+  //  ロード直後にダイアログが画面を覆って操作不能になる事故 ( ユーザー報告 2026-06-28: ダイアログが常に表示され
+  //  閉じられない ) を防ぐ。 認識可能な overlay/dialog セレクタに該当する要素はロード時に必ず閉じる
+  //  ( 開クラス除去 or display:none ) 。 真にロード時表示すべき業務コンテンツは overlay セレクタに該当しないため
+  //  影響しない ( パネルコンテナは data-aivic-panel で別管理 ) 。
+  var aivicHideOverlaysOnLoad = function() {
+    var ov = document.querySelectorAll(AIVIC_OVERLAY_SELECTOR);
+    for (var i = 0; i < ov.length; i++) aivicCloseOverlay(ov[i]);
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", aivicHideOverlaysOnLoad);
+  } else {
+    aivicHideOverlaysOnLoad();
+  }
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,366 @@
+[
+  {
+    "systemId": "itg-1",
+    "systemName": "日報管理システム",
+    "screens": [
+      {
+        "id": "scr-1789983412165",
+        "name": "日報入力・提出画面",
+        "purpose": "ユーザーが日報内容を入力・提出し、提出時に自動メール通知を送信する画面。入力値の妥当性チェックと提出完了確認を行う。",
+        "items": [
+          "日報内容テキスト入力フィールド",
+          "入力値妥当性チェック結果表示エリア",
+          "日報送信ボタン",
+          "提出完了確認メッセージ",
+          "メール通知送信状態表示",
+          "キャンセルボタン"
+        ]
+      },
+      {
+        "id": "scr-1789983420567",
+        "name": "日報確認・管理画面",
+        "purpose": "提出済み日報の確認・閲覧、未提出者の自動検知と一覧表示、報告者へのリマインダー通知送信、リマインダー設定の管理、検知ログとメール送信履歴の確認を一元的に行う管理画面",
+        "items": [
+          "提出済み日報一覧表示",
+          "日報検索・フィルター機能",
+          "日報詳細確認ボタン",
+          "未提出者自動検知一覧",
+          "未提出者名",
+          "未提出者所属部門",
+          "未提出期間",
+          "リマインダー送信ボタン",
+          "一括リマインダー送信ボタン",
+          "日報リマインダー設定管理ボタン",
+          "リマインダー送信時刻設定",
+          "リマインダー送信対象者設定"
+        ]
+      }
+    ],
+    "tableDefinitions": [
+      {
+        "tableName": "ユーザー",
+        "purpose": "日報管理システムのユーザー情報を管理し、認証・認可・監査ログの基盤となるマスタテーブル",
+        "columns": [
+          {
+            "name": "ユーザーID",
+            "type": "uuid",
+            "required": true,
+            "description": "ユーザーの一意識別子"
+          },
+          {
+            "name": "ユーザー名",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "ログイン時に使用するユーザー名"
+          },
+          {
+            "name": "メールアドレス",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "ユーザーの連絡先メールアドレス"
+          },
+          {
+            "name": "氏名",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "ユーザーの表示用氏名"
+          },
+          {
+            "name": "部門",
+            "type": "varchar(100)",
+            "required": false,
+            "description": "ユーザーが所属する部門"
+          },
+          {
+            "name": "役割",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "ユーザーの権限レベル（管理者・マネージャー・一般等）"
+          },
+          {
+            "name": "ステータス",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "ユーザーの状態（有効・無効・休止等）"
+          },
+          {
+            "name": "作成日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "ユーザーレコードの作成日時"
+          },
+          {
+            "name": "更新日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "ユーザーレコードの最終更新日時"
+          },
+          {
+            "name": "作成者",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "ユーザーレコードを作成したユーザー"
+          }
+        ]
+      },
+      {
+        "tableName": "日報",
+        "purpose": "従業員の日次業務報告を記録・管理し、業務内容、成果、課題を追跡するシステム",
+        "columns": [
+          {
+            "name": "日報ID",
+            "type": "uuid",
+            "required": true,
+            "description": "日報の一意識別子"
+          },
+          {
+            "name": "ユーザーID",
+            "type": "uuid",
+            "required": true,
+            "description": "日報を作成したユーザーの外部キー"
+          },
+          {
+            "name": "報告日",
+            "type": "timestamp",
+            "required": true,
+            "description": "日報が対象とする業務日"
+          },
+          {
+            "name": "業務内容",
+            "type": "text",
+            "required": true,
+            "description": "本日実施した業務の詳細説明"
+          },
+          {
+            "name": "成果",
+            "type": "text",
+            "required": false,
+            "description": "本日の業務成果・達成事項"
+          },
+          {
+            "name": "課題",
+            "type": "text",
+            "required": false,
+            "description": "発生した課題・問題点"
+          },
+          {
+            "name": "明日の予定",
+            "type": "text",
+            "required": false,
+            "description": "翌日の予定・計画"
+          },
+          {
+            "name": "作成日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "日報が作成された日時"
+          },
+          {
+            "name": "更新日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "日報が最後に更新された日時"
+          }
+        ]
+      },
+      {
+        "tableName": "日報リマインダー設定",
+        "purpose": "ユーザーごとの日報提出リマインダーの配信設定を管理し、リマインダー送信の有効/無効、送信時刻、送信頻度などを制御する",
+        "columns": [
+          {
+            "name": "リマインダー設定ID",
+            "type": "uuid",
+            "required": true,
+            "description": "リマインダー設定の一意識別子"
+          },
+          {
+            "name": "ユーザーID",
+            "type": "uuid",
+            "required": true,
+            "description": "ユーザーテーブルへの外部キー参照"
+          },
+          {
+            "name": "有効フラグ",
+            "type": "boolean",
+            "required": true,
+            "description": "リマインダー配信の有効/無効を示すフラグ"
+          },
+          {
+            "name": "送信時刻",
+            "type": "varchar(5)",
+            "required": true,
+            "description": "リマインダー送信時刻をHH:MM形式で指定"
+          },
+          {
+            "name": "送信曜日",
+            "type": "varchar(100)",
+            "required": false,
+            "description": "リマインダー送信対象の曜日をカンマ区切りで指定(例:月,火,水,木,金)"
+          },
+          {
+            "name": "送信方法",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "リマインダー送信方法(メール、アプリ通知など)"
+          },
+          {
+            "name": "作成日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "設定レコードの作成日時"
+          },
+          {
+            "name": "更新日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "設定レコードの最終更新日時"
+          }
+        ]
+      },
+      {
+        "tableName": "日報未提出者検知ログ",
+        "purpose": "日報の未提出者を検知した際のログを記録し、リマインダー送信履歴や未提出状況の追跡を管理するテーブル",
+        "columns": [
+          {
+            "name": "検知ログID",
+            "type": "uuid",
+            "required": true,
+            "description": "検知ログの一意識別子"
+          },
+          {
+            "name": "ユーザーID",
+            "type": "uuid",
+            "required": true,
+            "description": "未提出者のユーザーID、ユーザーテーブルへの外部キー"
+          },
+          {
+            "name": "対象日付",
+            "type": "timestamp",
+            "required": true,
+            "description": "未提出となっている日報の対象日付"
+          },
+          {
+            "name": "検知日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "未提出を検知した日時"
+          },
+          {
+            "name": "リマインダー送信済み",
+            "type": "boolean",
+            "required": true,
+            "description": "リマインダーが送信されたかどうかを示すフラグ"
+          },
+          {
+            "name": "リマインダー送信日時",
+            "type": "timestamp",
+            "required": false,
+            "description": "リマインダーを送信した日時、未送信の場合はNULL"
+          },
+          {
+            "name": "提出状況",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "未提出、提出済み、期限超過などの提出状況を示す値"
+          },
+          {
+            "name": "作成日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "ログレコードの作成日時"
+          },
+          {
+            "name": "更新日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "ログレコードの最終更新日時"
+          }
+        ]
+      },
+      {
+        "tableName": "メール送信履歴",
+        "purpose": "日報管理システムにおけるメール送信の記録を管理し、送信状況の追跡、再送信の判定、送信失敗の原因分析を行うための履歴テーブル",
+        "columns": [
+          {
+            "name": "メール送信履歴ID",
+            "type": "uuid",
+            "required": true,
+            "description": "メール送信履歴の一意識別子"
+          },
+          {
+            "name": "ユーザーID",
+            "type": "uuid",
+            "required": true,
+            "description": "メール送信対象のユーザーID、ユーザーテーブルへの外部キー"
+          },
+          {
+            "name": "メールタイプ",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "メールの種類（リマインダー、未提出通知など）"
+          },
+          {
+            "name": "送信先メールアドレス",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "実際に送信されたメールアドレス"
+          },
+          {
+            "name": "件名",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "メールの件名"
+          },
+          {
+            "name": "本文",
+            "type": "text",
+            "required": true,
+            "description": "メールの本文内容"
+          },
+          {
+            "name": "送信日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "メール送信実行日時"
+          },
+          {
+            "name": "送信ステータス",
+            "type": "varchar(100)",
+            "required": true,
+            "description": "送信結果（成功、失敗、保留中など）"
+          },
+          {
+            "name": "エラーメッセージ",
+            "type": "text",
+            "required": false,
+            "description": "送信失敗時のエラー内容"
+          },
+          {
+            "name": "関連日報ID",
+            "type": "uuid",
+            "required": false,
+            "description": "関連する日報ID、日報テーブルへの外部キー"
+          },
+          {
+            "name": "関連リマインダー設定ID",
+            "type": "uuid",
+            "required": false,
+            "description": "関連するリマインダー設定ID、日報リマインダー設定テーブルへの外部キー"
+          },
+          {
+            "name": "再送信フラグ",
+            "type": "boolean",
+            "required": true,
+            "description": "再送信対象かどうかを示すフラグ"
+          },
+          {
+            "name": "作成日時",
+            "type": "timestamp",
+            "required": true,
+            "description": "レコード作成日時"
+          }
+        ]
+      }
+    ]
+  }
+]
