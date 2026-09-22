@@ -48,7 +48,7 @@ jobs:
         run: npx playwright test --shard=${{ matrix.shard }}/4 --reporter=line,junit
         env:
           PLAYWRIGHT_JUNIT_OUTPUT_FILE: ./test-results/playwright-junit-${{ matrix.shard }}.xml
-          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_BASE_URL: https://dev.d3lvn2jszu4q9i.amplifyapp.com
         continue-on-error: true
       - name: Upload test results (shard ${{ matrix.shard }})
         if: always()
