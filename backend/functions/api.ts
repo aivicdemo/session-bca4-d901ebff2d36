@@ -8,28 +8,20 @@ import {
   DeleteCommand,
   ScanCommand,
   QueryCommand,
-  BatchWriteCommand,
+  BatchWriteCommand
 } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'crypto';
-import {
-  extractAuthContext,
-  checkPermission,
-  createUnauthorizedResponse,
-  createBadRequestResponse,
-  createNotFoundResponse,
-  createInternalErrorResponse,
-  createSuccessResponse,
-} from './rbac';
+import { checkPermission, extractAuthContext, AuthContext } from './rbac';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
-const tableName = process.env.MAIN_TABLE || 'daily-report-system';
+const TABLE_NAME = process.env.MAIN_TABLE || 'daily-report-system';
 
 interface User {
   pk: string;
   sk: string;
   userId: string;
-  userName: string;
+  username: string;
   email: string;
   fullName: string;
   department?: string;
@@ -46,7 +38,7 @@ interface DailyReport {
   reportId: string;
   userId: string;
   reportDate: number;
-  taskContent: string;
+  workContent: string;
   achievements?: string;
   issues?: string;
   tomorrowPlan?: string;
@@ -103,1328 +95,1217 @@ interface AuditLog {
   pk: string;
   sk: string;
   action: string;
-  entityType: string;
-  entityId: string;
   userId: string;
+  resource: string;
+  resourceId: string;
   changes: Record<string, unknown>;
   timestamp: number;
 }
 
-function createAuditLog(
-  action: string,
-  entityType: string,
-  entityId: string,
-  userId: string,
-  changes: Record<string, unknown>
-): AuditLog {
+function createErrorResponse(statusCode: number, message: string): APIGatewayProxyResult {
   return {
-    pk: 'AUDIT',
-    sk: `${entityType}#${entityId}#${Date.now()}`,
-    action,
-    entityType,
-    entityId,
-    userId,
-    changes,
-    timestamp: Date.now(),
+    statusCode,
+    body: JSON.stringify({ error: message })
   };
 }
 
-async function getUser(userId: string): Promise<User | null> {
+function createSuccessResponse(statusCode: number, data: unknown): APIGatewayProxyResult {
+  return {
+    statusCode,
+    body: JSON.stringify(data)
+  };
+}
+
+async function createAuditLog(
+  action: string,
+  userId: string,
+  resource: string,
+  resourceId: string,
+  changes: Record<string, unknown>
+): Promise<void> {
+  const auditLog: AuditLog = {
+    pk: 'AUDIT',
+    sk: `${Date.now()}#${randomUUID()}`,
+    action,
+    userId,
+    resource,
+    resourceId,
+    changes,
+    timestamp: Date.now()
+  };
+
+  await docClient.send(
+    new PutCommand({
+      TableName: TABLE_NAME,
+      Item: auditLog
+    })
+  );
+}
+
+async function handleGetResources(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
+  try {
+    const resources = [
+      { name: 'users', description: 'User management' },
+      { name: 'daily-reports', description: 'Daily reports' },
+      { name: 'reminder-settings', description: 'Reminder settings' },
+      { name: 'detection-logs', description: 'Detection logs' },
+      { name: 'email-history', description: 'Email history' }
+    ];
+
+    return createSuccessResponse(200, { resources });
+  } catch (error) {
+    console.error('Error getting resources:', error);
+    return createErrorResponse(500, 'Internal server error');
+  }
+}
+
+async function handleGetUsers(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
     const result = await docClient.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk: 'USER', sk: userId },
+      new ScanCommand({
+        TableName: TABLE_NAME,
+        FilterExpression: 'begins_with(pk, :pk)',
+        ExpressionAttributeValues: {
+          ':pk': 'USER'
+        }
       })
     );
-    return result.Item as User | undefined || null;
+
+    return createSuccessResponse(200, { users: result.Items || [] });
+  } catch (error) {
+    console.error('Error getting users:', error);
+    return createErrorResponse(500, 'Internal server error');
+  }
+}
+
+async function handleGetUser(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
+  try {
+    const userId = event.pathParameters?.id;
+    if (!userId) {
+      return createErrorResponse(400, 'User ID is required');
+    }
+
+    const result = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `USER#${userId}`,
+          sk: 'PROFILE'
+        }
+      })
+    );
+
+    if (!result.Item) {
+      return createErrorResponse(404, 'User not found');
+    }
+
+    return createSuccessResponse(200, result.Item);
   } catch (error) {
     console.error('Error getting user:', error);
-    return null;
-  }
-}
-
-async function listUsers(): Promise<User[]> {
-  try {
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'begins_with(pk, :pk)',
-        ExpressionAttributeValues: { ':pk': 'USER' },
-      })
-    );
-    return (result.Items as User[]) || [];
-  } catch (error) {
-    console.error('Error listing users:', error);
-    return [];
-  }
-}
-
-async function createUser(user: Omit<User, 'pk' | 'sk' | 'createdAt' | 'updatedAt'>, userId: string): Promise<User> {
-  const now = Date.now();
-  const newUser: User = {
-    pk: 'USER',
-    sk: user.userId,
-    ...user,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: newUser,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('CREATE', 'USER', user.userId, userId, newUser),
-    })
-  );
-
-  return newUser;
-}
-
-async function updateUser(userId: string, updates: Partial<User>, requestUserId: string): Promise<User | null> {
-  const now = Date.now();
-  const user = await getUser(userId);
-  if (!user) return null;
-
-  const updatedUser = { ...user, ...updates, updatedAt: now };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: updatedUser,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('UPDATE', 'USER', userId, requestUserId, updates),
-    })
-  );
-
-  return updatedUser;
-}
-
-async function deleteUser(userId: string, requestUserId: string): Promise<boolean> {
-  try {
-    await docClient.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: { pk: 'USER', sk: userId },
-      })
-    );
-
-    await docClient.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: createAuditLog('DELETE', 'USER', userId, requestUserId, {}),
-      })
-    );
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting user:', error);
-    return false;
-  }
-}
-
-async function getDailyReport(reportId: string): Promise<DailyReport | null> {
-  try {
-    const result = await docClient.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk: 'REPORT', sk: reportId },
-      })
-    );
-    return result.Item as DailyReport | undefined || null;
-  } catch (error) {
-    console.error('Error getting daily report:', error);
-    return null;
-  }
-}
-
-async function listDailyReports(): Promise<DailyReport[]> {
-  try {
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'begins_with(pk, :pk)',
-        ExpressionAttributeValues: { ':pk': 'REPORT' },
-      })
-    );
-    return (result.Items as DailyReport[]) || [];
-  } catch (error) {
-    console.error('Error listing daily reports:', error);
-    return [];
-  }
-}
-
-async function createDailyReport(
-  report: Omit<DailyReport, 'pk' | 'sk' | 'createdAt' | 'updatedAt'>,
-  userId: string
-): Promise<DailyReport> {
-  const now = Date.now();
-  const newReport: DailyReport = {
-    pk: 'REPORT',
-    sk: report.reportId,
-    ...report,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: newReport,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('CREATE', 'REPORT', report.reportId, userId, newReport),
-    })
-  );
-
-  return newReport;
-}
-
-async function updateDailyReport(
-  reportId: string,
-  updates: Partial<DailyReport>,
-  requestUserId: string
-): Promise<DailyReport | null> {
-  const now = Date.now();
-  const report = await getDailyReport(reportId);
-  if (!report) return null;
-
-  const updatedReport = { ...report, ...updates, updatedAt: now };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: updatedReport,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('UPDATE', 'REPORT', reportId, requestUserId, updates),
-    })
-  );
-
-  return updatedReport;
-}
-
-async function deleteDailyReport(reportId: string, requestUserId: string): Promise<boolean> {
-  try {
-    await docClient.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: { pk: 'REPORT', sk: reportId },
-      })
-    );
-
-    await docClient.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: createAuditLog('DELETE', 'REPORT', reportId, requestUserId, {}),
-      })
-    );
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting daily report:', error);
-    return false;
-  }
-}
-
-async function getReminder(reminderId: string): Promise<ReminderSetting | null> {
-  try {
-    const result = await docClient.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk: 'REMINDER', sk: reminderId },
-      })
-    );
-    return result.Item as ReminderSetting | undefined || null;
-  } catch (error) {
-    console.error('Error getting reminder:', error);
-    return null;
-  }
-}
-
-async function listReminders(): Promise<ReminderSetting[]> {
-  try {
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'begins_with(pk, :pk)',
-        ExpressionAttributeValues: { ':pk': 'REMINDER' },
-      })
-    );
-    return (result.Items as ReminderSetting[]) || [];
-  } catch (error) {
-    console.error('Error listing reminders:', error);
-    return [];
-  }
-}
-
-async function createReminder(
-  reminder: Omit<ReminderSetting, 'pk' | 'sk' | 'createdAt' | 'updatedAt'>,
-  userId: string
-): Promise<ReminderSetting> {
-  const now = Date.now();
-  const newReminder: ReminderSetting = {
-    pk: 'REMINDER',
-    sk: reminder.reminderId,
-    ...reminder,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: newReminder,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('CREATE', 'REMINDER', reminder.reminderId, userId, newReminder),
-    })
-  );
-
-  return newReminder;
-}
-
-async function updateReminder(
-  reminderId: string,
-  updates: Partial<ReminderSetting>,
-  requestUserId: string
-): Promise<ReminderSetting | null> {
-  const now = Date.now();
-  const reminder = await getReminder(reminderId);
-  if (!reminder) return null;
-
-  const updatedReminder = { ...reminder, ...updates, updatedAt: now };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: updatedReminder,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('UPDATE', 'REMINDER', reminderId, requestUserId, updates),
-    })
-  );
-
-  return updatedReminder;
-}
-
-async function deleteReminder(reminderId: string, requestUserId: string): Promise<boolean> {
-  try {
-    await docClient.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: { pk: 'REMINDER', sk: reminderId },
-      })
-    );
-
-    await docClient.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: createAuditLog('DELETE', 'REMINDER', reminderId, requestUserId, {}),
-      })
-    );
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting reminder:', error);
-    return false;
-  }
-}
-
-async function getDetectionLog(logId: string): Promise<DetectionLog | null> {
-  try {
-    const result = await docClient.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk: 'DETECTION', sk: logId },
-      })
-    );
-    return result.Item as DetectionLog | undefined || null;
-  } catch (error) {
-    console.error('Error getting detection log:', error);
-    return null;
-  }
-}
-
-async function listDetectionLogs(): Promise<DetectionLog[]> {
-  try {
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'begins_with(pk, :pk)',
-        ExpressionAttributeValues: { ':pk': 'DETECTION' },
-      })
-    );
-    return (result.Items as DetectionLog[]) || [];
-  } catch (error) {
-    console.error('Error listing detection logs:', error);
-    return [];
-  }
-}
-
-async function createDetectionLog(
-  log: Omit<DetectionLog, 'pk' | 'sk' | 'createdAt' | 'updatedAt'>,
-  userId: string
-): Promise<DetectionLog> {
-  const now = Date.now();
-  const newLog: DetectionLog = {
-    pk: 'DETECTION',
-    sk: log.logId,
-    ...log,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: newLog,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('CREATE', 'DETECTION', log.logId, userId, newLog),
-    })
-  );
-
-  return newLog;
-}
-
-async function updateDetectionLog(
-  logId: string,
-  updates: Partial<DetectionLog>,
-  requestUserId: string
-): Promise<DetectionLog | null> {
-  const now = Date.now();
-  const log = await getDetectionLog(logId);
-  if (!log) return null;
-
-  const updatedLog = { ...log, ...updates, updatedAt: now };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: updatedLog,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('UPDATE', 'DETECTION', logId, requestUserId, updates),
-    })
-  );
-
-  return updatedLog;
-}
-
-async function deleteDetectionLog(logId: string, requestUserId: string): Promise<boolean> {
-  try {
-    await docClient.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: { pk: 'DETECTION', sk: logId },
-      })
-    );
-
-    await docClient.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: createAuditLog('DELETE', 'DETECTION', logId, requestUserId, {}),
-      })
-    );
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting detection log:', error);
-    return false;
-  }
-}
-
-async function getEmailHistory(emailId: string): Promise<EmailHistory | null> {
-  try {
-    const result = await docClient.send(
-      new GetCommand({
-        TableName: tableName,
-        Key: { pk: 'EMAIL', sk: emailId },
-      })
-    );
-    return result.Item as EmailHistory | undefined || null;
-  } catch (error) {
-    console.error('Error getting email history:', error);
-    return null;
-  }
-}
-
-async function listEmailHistory(): Promise<EmailHistory[]> {
-  try {
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'begins_with(pk, :pk)',
-        ExpressionAttributeValues: { ':pk': 'EMAIL' },
-      })
-    );
-    return (result.Items as EmailHistory[]) || [];
-  } catch (error) {
-    console.error('Error listing email history:', error);
-    return [];
-  }
-}
-
-async function createEmailHistory(
-  email: Omit<EmailHistory, 'pk' | 'sk' | 'createdAt'>,
-  userId: string
-): Promise<EmailHistory> {
-  const now = Date.now();
-  const newEmail: EmailHistory = {
-    pk: 'EMAIL',
-    sk: email.emailId,
-    ...email,
-    createdAt: now,
-  };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: newEmail,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('CREATE', 'EMAIL', email.emailId, userId, newEmail),
-    })
-  );
-
-  return newEmail;
-}
-
-async function updateEmailHistory(
-  emailId: string,
-  updates: Partial<EmailHistory>,
-  requestUserId: string
-): Promise<EmailHistory | null> {
-  const email = await getEmailHistory(emailId);
-  if (!email) return null;
-
-  const updatedEmail = { ...email, ...updates };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: updatedEmail,
-    })
-  );
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('UPDATE', 'EMAIL', emailId, requestUserId, updates),
-    })
-  );
-
-  return updatedEmail;
-}
-
-async function deleteEmailHistory(emailId: string, requestUserId: string): Promise<boolean> {
-  try {
-    await docClient.send(
-      new DeleteCommand({
-        TableName: tableName,
-        Key: { pk: 'EMAIL', sk: emailId },
-      })
-    );
-
-    await docClient.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: createAuditLog('DELETE', 'EMAIL', emailId, requestUserId, {}),
-      })
-    );
-
-    return true;
-  } catch (error) {
-    console.error('Error deleting email history:', error);
-    return false;
-  }
-}
-
-async function bulkWriteItems(
-  items: Record<string, unknown>[],
-  entityType: string,
-  userId: string
-): Promise<{ imported: number; failed: number; errors: string[] }> {
-  const errors: string[] = [];
-  let imported = 0;
-  let failed = 0;
-
-  const now = Date.now();
-  const processedItems = items.map((item) => ({
-    ...item,
-    id: (item.id as string) || randomUUID(),
-    createdAt: now,
-    updatedAt: now,
-  }));
-
-  const chunks = [];
-  for (let i = 0; i < processedItems.length; i += 25) {
-    chunks.push(processedItems.slice(i, i + 25));
-  }
-
-  for (const chunk of chunks) {
-    try {
-      const requests = chunk.map((item) => ({
-        PutRequest: {
-          Item: {
-            pk: entityType,
-            sk: (item.id as string) || randomUUID(),
-            ...item,
-          },
-        },
-      }));
-
-      await docClient.send(
-        new BatchWriteCommand({
-          RequestItems: {
-            [tableName]: requests,
-          },
-        })
-      );
-
-      imported += chunk.length;
-    } catch (error) {
-      failed += chunk.length;
-      errors.push(`Batch write failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  await docClient.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: createAuditLog('BULK_CREATE', entityType, `bulk-${Date.now()}`, userId, {
-        imported,
-        failed,
-        itemCount: items.length,
-      }),
-    })
-  );
-
-  return { imported, failed, errors };
-}
-
-async function handleGetResources(): Promise<APIGatewayProxyResult> {
-  try {
-    const [users, reports, reminders, detectionLogs, emailHistory] = await Promise.all([
-      listUsers(),
-      listDailyReports(),
-      listReminders(),
-      listDetectionLogs(),
-      listEmailHistory(),
-    ]);
-
-    return createSuccessResponse({
-      users,
-      reports,
-      reminders,
-      detectionLogs,
-      emailHistory,
-    });
-  } catch (error) {
-    console.error('Error in handleGetResources:', error);
-    return createInternalErrorResponse('Failed to retrieve resources');
-  }
-}
-
-async function handleGetUsers(): Promise<APIGatewayProxyResult> {
-  try {
-    const users = await listUsers();
-    return createSuccessResponse(users);
-  } catch (error) {
-    console.error('Error in handleGetUsers:', error);
-    return createInternalErrorResponse('Failed to retrieve users');
-  }
-}
-
-async function handleGetUser(userId: string): Promise<APIGatewayProxyResult> {
-  try {
-    const user = await getUser(userId);
-    if (!user) {
-      return createNotFoundResponse('User not found');
-    }
-    return createSuccessResponse(user);
-  } catch (error) {
-    console.error('Error in handleGetUser:', error);
-    return createInternalErrorResponse('Failed to retrieve user');
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleCreateUser(
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!body.userName || !body.email || !body.fullName || !body.role || !body.status) {
-      return createBadRequestResponse('Missing required fields');
+    const body = JSON.parse(event.body || '{}');
+
+    if (!body.username || !body.email || !body.fullName || !body.role || !body.status) {
+      return createErrorResponse(400, 'Missing required fields');
     }
 
     const userId = randomUUID();
-    const user = await createUser(
-      {
-        userId,
-        userName: body.userName as string,
-        email: body.email as string,
-        fullName: body.fullName as string,
-        department: body.department as string | undefined,
-        role: body.role as string,
-        status: body.status as string,
-        createdBy: requestUserId,
-      },
-      requestUserId
+    const now = Date.now();
+
+    const user: User = {
+      pk: `USER#${userId}`,
+      sk: 'PROFILE',
+      userId,
+      username: body.username,
+      email: body.email,
+      fullName: body.fullName,
+      department: body.department,
+      role: body.role,
+      status: body.status,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: auth.userId
+    };
+
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: user
+      })
     );
 
-    return createSuccessResponse(user, 201);
+    await createAuditLog('CREATE', auth.userId, 'USER', userId, { user });
+
+    return createSuccessResponse(201, user);
   } catch (error) {
-    console.error('Error in handleCreateUser:', error);
-    return createInternalErrorResponse('Failed to create user');
+    console.error('Error creating user:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleUpdateUser(
-  userId: string,
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    const user = await updateUser(userId, body as Partial<User>, requestUserId);
-    if (!user) {
-      return createNotFoundResponse('User not found');
+    const userId = event.pathParameters?.id;
+    if (!userId) {
+      return createErrorResponse(400, 'User ID is required');
     }
-    return createSuccessResponse(user);
+
+    const body = JSON.parse(event.body || '{}');
+    const now = Date.now();
+
+    const updateExpression = [];
+    const expressionAttributeValues: Record<string, unknown> = {};
+
+    if (body.username) {
+      updateExpression.push('username = :username');
+      expressionAttributeValues[':username'] = body.username;
+    }
+    if (body.email) {
+      updateExpression.push('email = :email');
+      expressionAttributeValues[':email'] = body.email;
+    }
+    if (body.fullName) {
+      updateExpression.push('fullName = :fullName');
+      expressionAttributeValues[':fullName'] = body.fullName;
+    }
+    if (body.department) {
+      updateExpression.push('department = :department');
+      expressionAttributeValues[':department'] = body.department;
+    }
+    if (body.role) {
+      updateExpression.push('role = :role');
+      expressionAttributeValues[':role'] = body.role;
+    }
+    if (body.status) {
+      updateExpression.push('status = :status');
+      expressionAttributeValues[':status'] = body.status;
+    }
+
+    updateExpression.push('updatedAt = :updatedAt');
+    expressionAttributeValues[':updatedAt'] = now;
+
+    const result = await docClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `USER#${userId}`,
+          sk: 'PROFILE'
+        },
+        UpdateExpression: `SET ${updateExpression.join(', ')}`,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW'
+      })
+    );
+
+    await createAuditLog('UPDATE', auth.userId, 'USER', userId, { changes: body });
+
+    return createSuccessResponse(200, result.Attributes);
   } catch (error) {
-    console.error('Error in handleUpdateUser:', error);
-    return createInternalErrorResponse('Failed to update user');
+    console.error('Error updating user:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleDeleteUser(userId: string, requestUserId: string): Promise<APIGatewayProxyResult> {
-  try {
-    const success = await deleteUser(userId, requestUserId);
-    if (!success) {
-      return createNotFoundResponse('User not found');
-    }
-    return createSuccessResponse({ message: 'User deleted successfully' });
-  } catch (error) {
-    console.error('Error in handleDeleteUser:', error);
-    return createInternalErrorResponse('Failed to delete user');
-  }
-}
-
-async function handleBulkCreateUsers(
-  body: Record<string, unknown>,
-  requestUserId: string
+async function handleDeleteUser(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!Array.isArray(body.items)) {
-      return createBadRequestResponse('items must be an array');
+    const userId = event.pathParameters?.id;
+    if (!userId) {
+      return createErrorResponse(400, 'User ID is required');
     }
 
-    const result = await bulkWriteItems(body.items, 'USER', requestUserId);
-    return createSuccessResponse(result, 201);
+    await docClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `USER#${userId}`,
+          sk: 'PROFILE'
+        }
+      })
+    );
+
+    await createAuditLog('DELETE', auth.userId, 'USER', userId, {});
+
+    return createSuccessResponse(204, {});
   } catch (error) {
-    console.error('Error in handleBulkCreateUsers:', error);
-    return createInternalErrorResponse('Failed to bulk create users');
+    console.error('Error deleting user:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleGetDailyReports(): Promise<APIGatewayProxyResult> {
+async function handleGetDailyReports(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
-    const reports = await listDailyReports();
-    return createSuccessResponse(reports);
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLE_NAME,
+        FilterExpression: 'begins_with(pk, :pk)',
+        ExpressionAttributeValues: {
+          ':pk': 'REPORT'
+        }
+      })
+    );
+
+    return createSuccessResponse(200, { reports: result.Items || [] });
   } catch (error) {
-    console.error('Error in handleGetDailyReports:', error);
-    return createInternalErrorResponse('Failed to retrieve daily reports');
+    console.error('Error getting daily reports:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleGetDailyReport(reportId: string): Promise<APIGatewayProxyResult> {
+async function handleGetDailyReport(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
-    const report = await getDailyReport(reportId);
-    if (!report) {
-      return createNotFoundResponse('Daily report not found');
+    const reportId = event.pathParameters?.id;
+    if (!reportId) {
+      return createErrorResponse(400, 'Report ID is required');
     }
-    return createSuccessResponse(report);
+
+    const result = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `REPORT#${reportId}`,
+          sk: 'DATA'
+        }
+      })
+    );
+
+    if (!result.Item) {
+      return createErrorResponse(404, 'Report not found');
+    }
+
+    return createSuccessResponse(200, result.Item);
   } catch (error) {
-    console.error('Error in handleGetDailyReport:', error);
-    return createInternalErrorResponse('Failed to retrieve daily report');
+    console.error('Error getting daily report:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleCreateDailyReport(
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!body.userId || !body.reportDate || !body.taskContent) {
-      return createBadRequestResponse('Missing required fields');
+    const body = JSON.parse(event.body || '{}');
+
+    if (!body.userId || !body.reportDate || !body.workContent) {
+      return createErrorResponse(400, 'Missing required fields');
     }
 
     const reportId = randomUUID();
-    const report = await createDailyReport(
-      {
-        reportId,
-        userId: body.userId as string,
-        reportDate: body.reportDate as number,
-        taskContent: body.taskContent as string,
-        achievements: body.achievements as string | undefined,
-        issues: body.issues as string | undefined,
-        tomorrowPlan: body.tomorrowPlan as string | undefined,
-      },
-      requestUserId
+    const now = Date.now();
+
+    const report: DailyReport = {
+      pk: `REPORT#${reportId}`,
+      sk: 'DATA',
+      reportId,
+      userId: body.userId,
+      reportDate: body.reportDate,
+      workContent: body.workContent,
+      achievements: body.achievements,
+      issues: body.issues,
+      tomorrowPlan: body.tomorrowPlan,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: report
+      })
     );
 
-    return createSuccessResponse(report, 201);
+    await createAuditLog('CREATE', auth.userId, 'REPORT', reportId, { report });
+
+    return createSuccessResponse(201, report);
   } catch (error) {
-    console.error('Error in handleCreateDailyReport:', error);
-    return createInternalErrorResponse('Failed to create daily report');
+    console.error('Error creating daily report:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleUpdateDailyReport(
-  reportId: string,
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    const report = await updateDailyReport(reportId, body as Partial<DailyReport>, requestUserId);
-    if (!report) {
-      return createNotFoundResponse('Daily report not found');
+    const reportId = event.pathParameters?.id;
+    if (!reportId) {
+      return createErrorResponse(400, 'Report ID is required');
     }
-    return createSuccessResponse(report);
+
+    const body = JSON.parse(event.body || '{}');
+    const now = Date.now();
+
+    const updateExpression = [];
+    const expressionAttributeValues: Record<string, unknown> = {};
+
+    if (body.workContent) {
+      updateExpression.push('workContent = :workContent');
+      expressionAttributeValues[':workContent'] = body.workContent;
+    }
+    if (body.achievements) {
+      updateExpression.push('achievements = :achievements');
+      expressionAttributeValues[':achievements'] = body.achievements;
+    }
+    if (body.issues) {
+      updateExpression.push('issues = :issues');
+      expressionAttributeValues[':issues'] = body.issues;
+    }
+    if (body.tomorrowPlan) {
+      updateExpression.push('tomorrowPlan = :tomorrowPlan');
+      expressionAttributeValues[':tomorrowPlan'] = body.tomorrowPlan;
+    }
+
+    updateExpression.push('updatedAt = :updatedAt');
+    expressionAttributeValues[':updatedAt'] = now;
+
+    const result = await docClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `REPORT#${reportId}`,
+          sk: 'DATA'
+        },
+        UpdateExpression: `SET ${updateExpression.join(', ')}`,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW'
+      })
+    );
+
+    await createAuditLog('UPDATE', auth.userId, 'REPORT', reportId, { changes: body });
+
+    return createSuccessResponse(200, result.Attributes);
   } catch (error) {
-    console.error('Error in handleUpdateDailyReport:', error);
-    return createInternalErrorResponse('Failed to update daily report');
+    console.error('Error updating daily report:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleDeleteDailyReport(reportId: string, requestUserId: string): Promise<APIGatewayProxyResult> {
-  try {
-    const success = await deleteDailyReport(reportId, requestUserId);
-    if (!success) {
-      return createNotFoundResponse('Daily report not found');
-    }
-    return createSuccessResponse({ message: 'Daily report deleted successfully' });
-  } catch (error) {
-    console.error('Error in handleDeleteDailyReport:', error);
-    return createInternalErrorResponse('Failed to delete daily report');
-  }
-}
-
-async function handleBulkCreateDailyReports(
-  body: Record<string, unknown>,
-  requestUserId: string
+async function handleDeleteDailyReport(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!Array.isArray(body.items)) {
-      return createBadRequestResponse('items must be an array');
+    const reportId = event.pathParameters?.id;
+    if (!reportId) {
+      return createErrorResponse(400, 'Report ID is required');
     }
 
-    const result = await bulkWriteItems(body.items, 'REPORT', requestUserId);
-    return createSuccessResponse(result, 201);
+    await docClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `REPORT#${reportId}`,
+          sk: 'DATA'
+        }
+      })
+    );
+
+    await createAuditLog('DELETE', auth.userId, 'REPORT', reportId, {});
+
+    return createSuccessResponse(204, {});
   } catch (error) {
-    console.error('Error in handleBulkCreateDailyReports:', error);
-    return createInternalErrorResponse('Failed to bulk create daily reports');
+    console.error('Error deleting daily report:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleGetReminders(): Promise<APIGatewayProxyResult> {
-  try {
-    const reminders = await listReminders();
-    return createSuccessResponse(reminders);
-  } catch (error) {
-    console.error('Error in handleGetReminders:', error);
-    return createInternalErrorResponse('Failed to retrieve reminders');
-  }
-}
-
-async function handleGetReminder(reminderId: string): Promise<APIGatewayProxyResult> {
-  try {
-    const reminder = await getReminder(reminderId);
-    if (!reminder) {
-      return createNotFoundResponse('Reminder not found');
-    }
-    return createSuccessResponse(reminder);
-  } catch (error) {
-    console.error('Error in handleGetReminder:', error);
-    return createInternalErrorResponse('Failed to retrieve reminder');
-  }
-}
-
-async function handleCreateReminder(
-  body: Record<string, unknown>,
-  requestUserId: string
+async function handleGetReminderSettings(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!body.userId || !body.sendTime || !body.sendMethod) {
-      return createBadRequestResponse('Missing required fields');
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLE_NAME,
+        FilterExpression: 'begins_with(pk, :pk)',
+        ExpressionAttributeValues: {
+          ':pk': 'REMINDER'
+        }
+      })
+    );
+
+    return createSuccessResponse(200, { settings: result.Items || [] });
+  } catch (error) {
+    console.error('Error getting reminder settings:', error);
+    return createErrorResponse(500, 'Internal server error');
+  }
+}
+
+async function handleGetReminderSetting(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
+  try {
+    const reminderId = event.pathParameters?.id;
+    if (!reminderId) {
+      return createErrorResponse(400, 'Reminder ID is required');
+    }
+
+    const result = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `REMINDER#${reminderId}`,
+          sk: 'CONFIG'
+        }
+      })
+    );
+
+    if (!result.Item) {
+      return createErrorResponse(404, 'Reminder setting not found');
+    }
+
+    return createSuccessResponse(200, result.Item);
+  } catch (error) {
+    console.error('Error getting reminder setting:', error);
+    return createErrorResponse(500, 'Internal server error');
+  }
+}
+
+async function handleCreateReminderSetting(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
+  try {
+    const body = JSON.parse(event.body || '{}');
+
+    if (!body.userId || body.enabled === undefined || !body.sendTime || !body.sendMethod) {
+      return createErrorResponse(400, 'Missing required fields');
     }
 
     const reminderId = randomUUID();
-    const reminder = await createReminder(
-      {
-        reminderId,
-        userId: body.userId as string,
-        enabled: (body.enabled as boolean) || true,
-        sendTime: body.sendTime as string,
-        sendDays: body.sendDays as string | undefined,
-        sendMethod: body.sendMethod as string,
-      },
-      requestUserId
+    const now = Date.now();
+
+    const setting: ReminderSetting = {
+      pk: `REMINDER#${reminderId}`,
+      sk: 'CONFIG',
+      reminderId,
+      userId: body.userId,
+      enabled: body.enabled,
+      sendTime: body.sendTime,
+      sendDays: body.sendDays,
+      sendMethod: body.sendMethod,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: setting
+      })
     );
 
-    return createSuccessResponse(reminder, 201);
+    await createAuditLog('CREATE', auth.userId, 'REMINDER', reminderId, { setting });
+
+    return createSuccessResponse(201, setting);
   } catch (error) {
-    console.error('Error in handleCreateReminder:', error);
-    return createInternalErrorResponse('Failed to create reminder');
+    console.error('Error creating reminder setting:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleUpdateReminder(
-  reminderId: string,
-  body: Record<string, unknown>,
-  requestUserId: string
+async function handleUpdateReminderSetting(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    const reminder = await updateReminder(reminderId, body as Partial<ReminderSetting>, requestUserId);
-    if (!reminder) {
-      return createNotFoundResponse('Reminder not found');
+    const reminderId = event.pathParameters?.id;
+    if (!reminderId) {
+      return createErrorResponse(400, 'Reminder ID is required');
     }
-    return createSuccessResponse(reminder);
+
+    const body = JSON.parse(event.body || '{}');
+    const now = Date.now();
+
+    const updateExpression = [];
+    const expressionAttributeValues: Record<string, unknown> = {};
+
+    if (body.enabled !== undefined) {
+      updateExpression.push('enabled = :enabled');
+      expressionAttributeValues[':enabled'] = body.enabled;
+    }
+    if (body.sendTime) {
+      updateExpression.push('sendTime = :sendTime');
+      expressionAttributeValues[':sendTime'] = body.sendTime;
+    }
+    if (body.sendDays) {
+      updateExpression.push('sendDays = :sendDays');
+      expressionAttributeValues[':sendDays'] = body.sendDays;
+    }
+    if (body.sendMethod) {
+      updateExpression.push('sendMethod = :sendMethod');
+      expressionAttributeValues[':sendMethod'] = body.sendMethod;
+    }
+
+    updateExpression.push('updatedAt = :updatedAt');
+    expressionAttributeValues[':updatedAt'] = now;
+
+    const result = await docClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `REMINDER#${reminderId}`,
+          sk: 'CONFIG'
+        },
+        UpdateExpression: `SET ${updateExpression.join(', ')}`,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW'
+      })
+    );
+
+    await createAuditLog('UPDATE', auth.userId, 'REMINDER', reminderId, { changes: body });
+
+    return createSuccessResponse(200, result.Attributes);
   } catch (error) {
-    console.error('Error in handleUpdateReminder:', error);
-    return createInternalErrorResponse('Failed to update reminder');
+    console.error('Error updating reminder setting:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleDeleteReminder(reminderId: string, requestUserId: string): Promise<APIGatewayProxyResult> {
-  try {
-    const success = await deleteReminder(reminderId, requestUserId);
-    if (!success) {
-      return createNotFoundResponse('Reminder not found');
-    }
-    return createSuccessResponse({ message: 'Reminder deleted successfully' });
-  } catch (error) {
-    console.error('Error in handleDeleteReminder:', error);
-    return createInternalErrorResponse('Failed to delete reminder');
-  }
-}
-
-async function handleBulkCreateReminders(
-  body: Record<string, unknown>,
-  requestUserId: string
+async function handleDeleteReminderSetting(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!Array.isArray(body.items)) {
-      return createBadRequestResponse('items must be an array');
+    const reminderId = event.pathParameters?.id;
+    if (!reminderId) {
+      return createErrorResponse(400, 'Reminder ID is required');
     }
 
-    const result = await bulkWriteItems(body.items, 'REMINDER', requestUserId);
-    return createSuccessResponse(result, 201);
+    await docClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `REMINDER#${reminderId}`,
+          sk: 'CONFIG'
+        }
+      })
+    );
+
+    await createAuditLog('DELETE', auth.userId, 'REMINDER', reminderId, {});
+
+    return createSuccessResponse(204, {});
   } catch (error) {
-    console.error('Error in handleBulkCreateReminders:', error);
-    return createInternalErrorResponse('Failed to bulk create reminders');
+    console.error('Error deleting reminder setting:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleGetDetectionLogs(): Promise<APIGatewayProxyResult> {
+async function handleGetDetectionLogs(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
-    const logs = await listDetectionLogs();
-    return createSuccessResponse(logs);
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLE_NAME,
+        FilterExpression: 'begins_with(pk, :pk)',
+        ExpressionAttributeValues: {
+          ':pk': 'DETECTION'
+        }
+      })
+    );
+
+    return createSuccessResponse(200, { logs: result.Items || [] });
   } catch (error) {
-    console.error('Error in handleGetDetectionLogs:', error);
-    return createInternalErrorResponse('Failed to retrieve detection logs');
+    console.error('Error getting detection logs:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleGetDetectionLog(logId: string): Promise<APIGatewayProxyResult> {
+async function handleGetDetectionLog(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
-    const log = await getDetectionLog(logId);
-    if (!log) {
-      return createNotFoundResponse('Detection log not found');
+    const logId = event.pathParameters?.id;
+    if (!logId) {
+      return createErrorResponse(400, 'Log ID is required');
     }
-    return createSuccessResponse(log);
+
+    const result = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `DETECTION#${logId}`,
+          sk: 'LOG'
+        }
+      })
+    );
+
+    if (!result.Item) {
+      return createErrorResponse(404, 'Detection log not found');
+    }
+
+    return createSuccessResponse(200, result.Item);
   } catch (error) {
-    console.error('Error in handleGetDetectionLog:', error);
-    return createInternalErrorResponse('Failed to retrieve detection log');
+    console.error('Error getting detection log:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleCreateDetectionLog(
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!body.userId || !body.targetDate || !body.submissionStatus) {
-      return createBadRequestResponse('Missing required fields');
+    const body = JSON.parse(event.body || '{}');
+
+    if (!body.userId || !body.targetDate || !body.submissionStatus || body.reminderSent === undefined) {
+      return createErrorResponse(400, 'Missing required fields');
     }
 
     const logId = randomUUID();
-    const log = await createDetectionLog(
-      {
-        logId,
-        userId: body.userId as string,
-        targetDate: body.targetDate as number,
-        detectedAt: Date.now(),
-        reminderSent: (body.reminderSent as boolean) || false,
-        reminderSentAt: body.reminderSentAt as number | undefined,
-        submissionStatus: body.submissionStatus as string,
-      },
-      requestUserId
+    const now = Date.now();
+
+    const log: DetectionLog = {
+      pk: `DETECTION#${logId}`,
+      sk: 'LOG',
+      logId,
+      userId: body.userId,
+      targetDate: body.targetDate,
+      detectedAt: now,
+      reminderSent: body.reminderSent,
+      reminderSentAt: body.reminderSentAt,
+      submissionStatus: body.submissionStatus,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: log
+      })
     );
 
-    return createSuccessResponse(log, 201);
+    await createAuditLog('CREATE', auth.userId, 'DETECTION', logId, { log });
+
+    return createSuccessResponse(201, log);
   } catch (error) {
-    console.error('Error in handleCreateDetectionLog:', error);
-    return createInternalErrorResponse('Failed to create detection log');
+    console.error('Error creating detection log:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleUpdateDetectionLog(
-  logId: string,
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    const log = await updateDetectionLog(logId, body as Partial<DetectionLog>, requestUserId);
-    if (!log) {
-      return createNotFoundResponse('Detection log not found');
+    const logId = event.pathParameters?.id;
+    if (!logId) {
+      return createErrorResponse(400, 'Log ID is required');
     }
-    return createSuccessResponse(log);
+
+    const body = JSON.parse(event.body || '{}');
+    const now = Date.now();
+
+    const updateExpression = [];
+    const expressionAttributeValues: Record<string, unknown> = {};
+
+    if (body.reminderSent !== undefined) {
+      updateExpression.push('reminderSent = :reminderSent');
+      expressionAttributeValues[':reminderSent'] = body.reminderSent;
+    }
+    if (body.reminderSentAt) {
+      updateExpression.push('reminderSentAt = :reminderSentAt');
+      expressionAttributeValues[':reminderSentAt'] = body.reminderSentAt;
+    }
+    if (body.submissionStatus) {
+      updateExpression.push('submissionStatus = :submissionStatus');
+      expressionAttributeValues[':submissionStatus'] = body.submissionStatus;
+    }
+
+    updateExpression.push('updatedAt = :updatedAt');
+    expressionAttributeValues[':updatedAt'] = now;
+
+    const result = await docClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `DETECTION#${logId}`,
+          sk: 'LOG'
+        },
+        UpdateExpression: `SET ${updateExpression.join(', ')}`,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW'
+      })
+    );
+
+    await createAuditLog('UPDATE', auth.userId, 'DETECTION', logId, { changes: body });
+
+    return createSuccessResponse(200, result.Attributes);
   } catch (error) {
-    console.error('Error in handleUpdateDetectionLog:', error);
-    return createInternalErrorResponse('Failed to update detection log');
+    console.error('Error updating detection log:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleDeleteDetectionLog(logId: string, requestUserId: string): Promise<APIGatewayProxyResult> {
-  try {
-    const success = await deleteDetectionLog(logId, requestUserId);
-    if (!success) {
-      return createNotFoundResponse('Detection log not found');
-    }
-    return createSuccessResponse({ message: 'Detection log deleted successfully' });
-  } catch (error) {
-    console.error('Error in handleDeleteDetectionLog:', error);
-    return createInternalErrorResponse('Failed to delete detection log');
-  }
-}
-
-async function handleBulkCreateDetectionLogs(
-  body: Record<string, unknown>,
-  requestUserId: string
+async function handleDeleteDetectionLog(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!Array.isArray(body.items)) {
-      return createBadRequestResponse('items must be an array');
+    const logId = event.pathParameters?.id;
+    if (!logId) {
+      return createErrorResponse(400, 'Log ID is required');
     }
 
-    const result = await bulkWriteItems(body.items, 'DETECTION', requestUserId);
-    return createSuccessResponse(result, 201);
+    await docClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `DETECTION#${logId}`,
+          sk: 'LOG'
+        }
+      })
+    );
+
+    await createAuditLog('DELETE', auth.userId, 'DETECTION', logId, {});
+
+    return createSuccessResponse(204, {});
   } catch (error) {
-    console.error('Error in handleBulkCreateDetectionLogs:', error);
-    return createInternalErrorResponse('Failed to bulk create detection logs');
+    console.error('Error deleting detection log:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleGetEmailHistory(): Promise<APIGatewayProxyResult> {
+async function handleGetEmailHistory(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
-    const history = await listEmailHistory();
-    return createSuccessResponse(history);
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLE_NAME,
+        FilterExpression: 'begins_with(pk, :pk)',
+        ExpressionAttributeValues: {
+          ':pk': 'EMAIL'
+        }
+      })
+    );
+
+    return createSuccessResponse(200, { history: result.Items || [] });
   } catch (error) {
-    console.error('Error in handleGetEmailHistory:', error);
-    return createInternalErrorResponse('Failed to retrieve email history');
+    console.error('Error getting email history:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleGetEmailHistoryItem(emailId: string): Promise<APIGatewayProxyResult> {
+async function handleGetEmailHistoryItem(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
-    const email = await getEmailHistory(emailId);
-    if (!email) {
-      return createNotFoundResponse('Email history not found');
+    const emailId = event.pathParameters?.id;
+    if (!emailId) {
+      return createErrorResponse(400, 'Email ID is required');
     }
-    return createSuccessResponse(email);
+
+    const result = await docClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `EMAIL#${emailId}`,
+          sk: 'RECORD'
+        }
+      })
+    );
+
+    if (!result.Item) {
+      return createErrorResponse(404, 'Email history not found');
+    }
+
+    return createSuccessResponse(200, result.Item);
   } catch (error) {
-    console.error('Error in handleGetEmailHistoryItem:', error);
-    return createInternalErrorResponse('Failed to retrieve email history');
+    console.error('Error getting email history item:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleCreateEmailHistory(
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
+    const body = JSON.parse(event.body || '{}');
+
     if (!body.userId || !body.emailType || !body.toAddress || !body.subject || !body.body || !body.status) {
-      return createBadRequestResponse('Missing required fields');
+      return createErrorResponse(400, 'Missing required fields');
     }
 
     const emailId = randomUUID();
-    const email = await createEmailHistory(
-      {
-        emailId,
-        userId: body.userId as string,
-        emailType: body.emailType as string,
-        toAddress: body.toAddress as string,
-        subject: body.subject as string,
-        body: body.body as string,
-        sentAt: (body.sentAt as number) || Date.now(),
-        status: body.status as string,
-        errorMessage: body.errorMessage as string | undefined,
-        relatedReportId: body.relatedReportId as string | undefined,
-        relatedReminderId: body.relatedReminderId as string | undefined,
-        retryFlag: (body.retryFlag as boolean) || false,
-      },
-      requestUserId
+    const now = Date.now();
+
+    const email: EmailHistory = {
+      pk: `EMAIL#${emailId}`,
+      sk: 'RECORD',
+      emailId,
+      userId: body.userId,
+      emailType: body.emailType,
+      toAddress: body.toAddress,
+      subject: body.subject,
+      body: body.body,
+      sentAt: body.sentAt || now,
+      status: body.status,
+      errorMessage: body.errorMessage,
+      relatedReportId: body.relatedReportId,
+      relatedReminderId: body.relatedReminderId,
+      retryFlag: body.retryFlag || false,
+      createdAt: now
+    };
+
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: email
+      })
     );
 
-    return createSuccessResponse(email, 201);
+    await createAuditLog('CREATE', auth.userId, 'EMAIL', emailId, { email });
+
+    return createSuccessResponse(201, email);
   } catch (error) {
-    console.error('Error in handleCreateEmailHistory:', error);
-    return createInternalErrorResponse('Failed to create email history');
+    console.error('Error creating email history:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 async function handleUpdateEmailHistory(
-  emailId: string,
-  body: Record<string, unknown>,
-  requestUserId: string
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
 ): Promise<APIGatewayProxyResult> {
   try {
-    const email = await updateEmailHistory(emailId, body as Partial<EmailHistory>, requestUserId);
-    if (!email) {
-      return createNotFoundResponse('Email history not found');
+    const emailId = event.pathParameters?.id;
+    if (!emailId) {
+      return createErrorResponse(400, 'Email ID is required');
     }
-    return createSuccessResponse(email);
+
+    const body = JSON.parse(event.body || '{}');
+
+    const updateExpression = [];
+    const expressionAttributeValues: Record<string, unknown> = {};
+
+    if (body.status) {
+      updateExpression.push('status = :status');
+      expressionAttributeValues[':status'] = body.status;
+    }
+    if (body.errorMessage) {
+      updateExpression.push('errorMessage = :errorMessage');
+      expressionAttributeValues[':errorMessage'] = body.errorMessage;
+    }
+    if (body.retryFlag !== undefined) {
+      updateExpression.push('retryFlag = :retryFlag');
+      expressionAttributeValues[':retryFlag'] = body.retryFlag;
+    }
+
+    const result = await docClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `EMAIL#${emailId}`,
+          sk: 'RECORD'
+        },
+        UpdateExpression: `SET ${updateExpression.join(', ')}`,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW'
+      })
+    );
+
+    await createAuditLog('UPDATE', auth.userId, 'EMAIL', emailId, { changes: body });
+
+    return createSuccessResponse(200, result.Attributes);
   } catch (error) {
-    console.error('Error in handleUpdateEmailHistory:', error);
-    return createInternalErrorResponse('Failed to update email history');
+    console.error('Error updating email history:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleDeleteEmailHistory(emailId: string, requestUserId: string): Promise<APIGatewayProxyResult> {
+async function handleDeleteEmailHistory(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext
+): Promise<APIGatewayProxyResult> {
   try {
-    const success = await deleteEmailHistory(emailId, requestUserId);
-    if (!success) {
-      return createNotFoundResponse('Email history not found');
+    const emailId = event.pathParameters?.id;
+    if (!emailId) {
+      return createErrorResponse(400, 'Email ID is required');
     }
-    return createSuccessResponse({ message: 'Email history deleted successfully' });
+
+    await docClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          pk: `EMAIL#${emailId}`,
+          sk: 'RECORD'
+        }
+      })
+    );
+
+    await createAuditLog('DELETE', auth.userId, 'EMAIL', emailId, {});
+
+    return createSuccessResponse(204, {});
   } catch (error) {
-    console.error('Error in handleDeleteEmailHistory:', error);
-    return createInternalErrorResponse('Failed to delete email history');
+    console.error('Error deleting email history:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
-async function handleBulkCreateEmailHistory(
-  body: Record<string, unknown>,
-  requestUserId: string
+interface BulkItem {
+  [key: string]: unknown;
+}
+
+const tableConfigs = [
+  { prefix: 'USER', sk: 'PROFILE' },
+  { prefix: 'REPORT', sk: 'DATA' },
+  { prefix: 'REMINDER', sk: 'CONFIG' },
+  { prefix: 'DETECTION', sk: 'LOG' },
+  { prefix: 'EMAIL', sk: 'RECORD' }
+];
+
+async function handleBulkImport(
+  event: APIGatewayProxyEvent,
+  auth: AuthContext,
+  tableIndex: number
 ): Promise<APIGatewayProxyResult> {
   try {
-    if (!Array.isArray(body.items)) {
-      return createBadRequestResponse('items must be an array');
+    if (tableIndex < 0 || tableIndex >= tableConfigs.length) {
+      return createErrorResponse(400, 'Invalid table index');
     }
 
-    const result = await bulkWriteItems(body.items, 'EMAIL', requestUserId);
-    return createSuccessResponse(result, 201);
+    const body = JSON.parse(event.body || '{}');
+    const items = body.items as BulkItem[];
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return createErrorResponse(400, 'Items array is required and must not be empty');
+    }
+
+    const config = tableConfigs[tableIndex];
+    const now = Date.now();
+    let imported = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    const processedItems = items.map((item) => ({
+      ...item,
+      id: item.id || randomUUID(),
+      createdAt: item.createdAt || now,
+      updatedAt: item.updatedAt || now
+    }));
+
+    for (let i = 0; i < processedItems.length; i += 25) {
+      const batch = processedItems.slice(i, i + 25);
+      const requestItems: Record<string, unknown>[] = [];
+
+      for (const item of batch) {
+        try {
+          const id = item.id as string;
+          const dynamoItem = {
+            pk: `${config.prefix}#${id}`,
+            sk: config.sk,
+            ...item
+          };
+
+          requestItems.push({
+            PutRequest: {
+              Item: dynamoItem
+            }
+          });
+        } catch (error) {
+          failed++;
+          errors.push(`Failed to process item: ${(error as Error).message}`);
+        }
+      }
+
+      if (requestItems.length > 0) {
+        try {
+          await docClient.send(
+            new BatchWriteCommand({
+              RequestItems: {
+                [TABLE_NAME]: requestItems
+              }
+            })
+          );
+          imported += requestItems.length;
+        } catch (error) {
+          failed += requestItems.length;
+          errors.push(`Batch write failed: ${(error as Error).message}`);
+        }
+      }
+    }
+
+    await createAuditLog('BULK_IMPORT', auth.userId, config.prefix, 'BULK', {
+      imported,
+      failed,
+      totalItems: items.length
+    });
+
+    return createSuccessResponse(200, { imported, failed, errors });
   } catch (error) {
-    console.error('Error in handleBulkCreateEmailHistory:', error);
-    return createInternalErrorResponse('Failed to bulk create email history');
+    console.error('Error in bulk import:', error);
+    return createErrorResponse(500, 'Internal server error');
   }
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const path = event.path || '';
+  const method = event.httpMethod || 'GET';
+  const endpoint = `${method} ${path}`;
+
+  const auth = extractAuthContext(event);
+  if (!auth) {
+    return createErrorResponse(401, 'Unauthorized');
+  }
+
+  if (!checkPermission(endpoint, auth.role)) {
+    return createErrorResponse(403, 'Forbidden');
+  }
+
   try {
-    const authContext = extractAuthContext(event);
-    const method = event.httpMethod;
-    const path = event.path;
-    const body = event.body ? JSON.parse(event.body) : {};
-    const pathParameters = event.pathParameters || {};
-
-    if (!checkPermission(method, path, authContext.role)) {
-      return createUnauthorizedResponse();
-    }
-
     if (method === 'GET' && path === '/resources') {
-      return await handleGetResources();
+      return await handleGetResources(event, auth);
     }
 
     if (method === 'GET' && path === '/users') {
-      return await handleGetUsers();
+      return await handleGetUsers(event, auth);
     }
 
     if (method === 'GET' && path.match(/^\/users\/[^/]+$/)) {
-      const userId = pathParameters.id || '';
-      return await handleGetUser(userId);
+      return await handleGetUser(event, auth);
     }
 
     if (method === 'POST' && path === '/users') {
-      return await handleCreateUser(body, authContext.userId);
+      return await handleCreateUser(event, auth);
     }
 
     if (method === 'PUT' && path.match(/^\/users\/[^/]+$/)) {
-      const userId = pathParameters.id || '';
-      return await handleUpdateUser(userId, body, authContext.userId);
+      return await handleUpdateUser(event, auth);
     }
 
     if (method === 'DELETE' && path.match(/^\/users\/[^/]+$/)) {
-      const userId = pathParameters.id || '';
-      return await handleDeleteUser(userId, authContext.userId);
-    }
-
-    if (method === 'POST' && path === '/api/users/bulk') {
-      return await handleBulkCreateUsers(body, authContext.userId);
+      return await handleDeleteUser(event, auth);
     }
 
     if (method === 'GET' && path === '/daily-reports') {
-      return await handleGetDailyReports();
+      return await handleGetDailyReports(event, auth);
     }
 
     if (method === 'GET' && path.match(/^\/daily-reports\/[^/]+$/)) {
-      const reportId = pathParameters.id || '';
-      return await handleGetDailyReport(reportId);
+      return await handleGetDailyReport(event, auth);
     }
 
     if (method === 'POST' && path === '/daily-reports') {
-      return await handleCreateDailyReport(body, authContext.userId);
+      return await handleCreateDailyReport(event, auth);
     }
 
     if (method === 'PUT' && path.match(/^\/daily-reports\/[^/]+$/)) {
-      const reportId = pathParameters.id || '';
-      return await handleUpdateDailyReport(reportId, body, authContext.userId);
+      return await handleUpdateDailyReport(event, auth);
     }
 
     if (method === 'DELETE' && path.match(/^\/daily-reports\/[^/]+$/)) {
-      const reportId = pathParameters.id || '';
-      return await handleDeleteDailyReport(reportId, authContext.userId);
+      return await handleDeleteDailyReport(event, auth);
     }
 
-    if (method === 'POST' && path === '/api/daily-reports/bulk') {
-      return await handleBulkCreateDailyReports(body, authContext.userId);
+    if (method === 'GET' && path === '/reminder-settings') {
+      return await handleGetReminderSettings(event, auth);
     }
 
-    if (method === 'GET' && path === '/reminders') {
-      return await handleGetReminders();
+    if (method === 'GET' && path.match(/^\/reminder-settings\/[^/]+$/)) {
+      return await handleGetReminderSetting(event, auth);
     }
 
-    if (method === 'GET' && path.match(/^\/reminders\/[^/]+$/)) {
-      const reminderId = pathParameters.id || '';
-      return await handleGetReminder(reminderId);
+    if (method === 'POST' && path === '/reminder-settings') {
+      return await handleCreateReminderSetting(event, auth);
     }
 
-    if (method === 'POST' && path === '/reminders') {
-      return await handleCreateReminder(body, authContext.userId);
+    if (method === 'PUT' && path.match(/^\/reminder-settings\/[^/]+$/)) {
+      return await handleUpdateReminderSetting(event, auth);
     }
 
-    if (method === 'PUT' && path.match(/^\/reminders\/[^/]+$/)) {
-      const reminderId = pathParameters.id || '';
-      return await handleUpdateReminder(reminderId, body, authContext.userId);
-    }
-
-    if (method === 'DELETE' && path.match(/^\/reminders\/[^/]+$/)) {
-      const reminderId = pathParameters.id || '';
-      return await handleDeleteReminder(reminderId, authContext.userId);
-    }
-
-    if (method === 'POST' && path === '/api/reminders/bulk') {
-      return await handleBulkCreateReminders(body, authContext.userId);
+    if (method === 'DELETE' && path.match(/^\/reminder-settings\/[^/]+$/)) {
+      return await handleDeleteReminderSetting(event, auth);
     }
 
     if (method === 'GET' && path === '/detection-logs') {
-      return await handleGetDetectionLogs();
+      return await handleGetDetectionLogs(event, auth);
     }
 
     if (method === 'GET' && path.match(/^\/detection-logs\/[^/]+$/)) {
-      const logId = pathParameters.id || '';
-      return await handleGetDetectionLog(logId);
+      return await handleGetDetectionLog(event, auth);
     }
 
     if (method === 'POST' && path === '/detection-logs') {
-      return await handleCreateDetectionLog(body, authContext.userId);
+      return await handleCreateDetectionLog(event, auth);
     }
 
     if (method === 'PUT' && path.match(/^\/detection-logs\/[^/]+$/)) {
-      const logId = pathParameters.id || '';
-      return await handleUpdateDetectionLog(logId, body, authContext.userId);
+      return await handleUpdateDetectionLog(event, auth);
     }
 
     if (method === 'DELETE' && path.match(/^\/detection-logs\/[^/]+$/)) {
-      const logId = pathParameters.id || '';
-      return await handleDeleteDetectionLog(logId, authContext.userId);
-    }
-
-    if (method === 'POST' && path === '/api/detection-logs/bulk') {
-      return await handleBulkCreateDetectionLogs(body, authContext.userId);
+      return await handleDeleteDetectionLog(event, auth);
     }
 
     if (method === 'GET' && path === '/email-history') {
-      return await handleGetEmailHistory();
+      return await handleGetEmailHistory(event, auth);
     }
 
     if (method === 'GET' && path.match(/^\/email-history\/[^/]+$/)) {
-      const emailId = pathParameters.id || '';
-      return await handleGetEmailHistoryItem(emailId);
+      return await handleGetEmailHistoryItem(event, auth);
     }
 
     if (method === 'POST' && path === '/email-history') {
-      return await handleCreateEmailHistory(body, authContext.userId);
+      return await handleCreateEmailHistory(event, auth);
     }
 
     if (method === 'PUT' && path.match(/^\/email-history\/[^/]+$/)) {
-      const emailId = pathParameters.id || '';
-      return await handleUpdateEmailHistory(emailId, body, authContext.userId);
+      return await handleUpdateEmailHistory(event, auth);
     }
 
     if (method === 'DELETE' && path.match(/^\/email-history\/[^/]+$/)) {
-      const emailId = pathParameters.id || '';
-      return await handleDeleteEmailHistory(emailId, authContext.userId);
+      return await handleDeleteEmailHistory(event, auth);
     }
 
-    if (method === 'POST' && path === '/api/email-history/bulk') {
-      return await handleBulkCreateEmailHistory(body, authContext.userId);
+    const bulkMatch = path.match(/^\/api\/(\d+)\/bulk$/);
+    if (method === 'POST' && bulkMatch) {
+      const tableIndex = parseInt(bulkMatch[1], 10);
+      return await handleBulkImport(event, auth, tableIndex);
     }
 
-    return createNotFoundResponse('Endpoint not found');
+    return createErrorResponse(404, 'Not found');
   } catch (error) {
     console.error('Unhandled error:', error);
-    return createInternalErrorResponse('Internal server error');
+    return createErrorResponse(500, 'Internal server error');
   }
 };
